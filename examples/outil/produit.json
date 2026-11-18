@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "product_id": "event-budget-example",
+  "title": "Event Budget Worksheet",
+  "kind": "outil",
+  "channel": "etsy",
+  "version": "1.0",
+  "language": "en",
+  "description": "A sample spreadsheet comparing planned and actual costs for a small event.",
+  "author": "Venture Studio",
+  "brief": "Let one organizer compare planned and actual event expenses and see the remaining total.",
+  "keywords": [
+    "budget worksheet",
+    "event budget"
+  ],
+  "category": "Budget templates",
+  "price": 9.9,
+  "currency": "USD",
+  "ai": "generated",
+  "ai_details": "Synthetic example text and layout prepared with AI.",
+  "expected": [
+    {
+      "name": "event-budget.xlsx",
+      "role": "client"
+    },
+    {
+      "name": "budget-preview.jpg",
+      "role": "preview"
+    }
+  ]
+}
