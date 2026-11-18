@@ -50,6 +50,102 @@ class Workflow(unittest.TestCase):
         self.assertEqual(r.status_code,200,r.text[:200] if r.status_code!=200 else "")
         self.refresh()
         return r.content
+
+    def test_delivery_knows_channel_roles_and_formats_for_existing_complete_files(self):
+        editions = (
+            ("etsy", {"client", "preview"}, ("pdf", "aperçu")),
+            ("outil", {"client", "preview"}, ("tableur", "aperçu")),
+            ("paper", {"interior", "cover"}, ("pdf", "intérieur", "couverture")),
+            ("kindle", {"ebook", "cover"}, ("epub", "jpeg", "couverture")),
+        )
+        for example, roles, terms in editions:
+            with self.subTest(example=example):
+                self.demo(example)
+                before = self.p
+                response = self.c.get(self.base + "/delivery")
+                self.assertEqual(response.status_code, 200, response.text)
+                plan = response.json()
+                self.assertEqual(plan["next"], "deposit")
+                self.assertEqual(plan["status"], "Brouillon")
+                self.assertEqual(plan["approved_count"], 0)
+                self.assertEqual(plan["blocking_count"], 0)
+                self.assertEqual(set(plan["ready_roles"]), roles)
+                self.assertEqual(plan["missing_roles"], [])
+                self.assertFalse(plan["prompt"])
+                self.refresh()
+                self.assertEqual(self.p, before)
+                for i in range(8):
+                    saved = self.request("PUT", f"/stages/{i}", json={
+                        "text": f"Reviewed production document {i}.", "decision": "approve",
+                    })
+                    self.assertEqual(saved.status_code, 200, saved.text)
+                    self.p = saved.json()
+                final = self.c.get(self.base + "/delivery").json()
+                self.assertEqual(final["next"], "deposit")
+                for term in terms:
+                    self.assertIn(term, final["prompt"].casefold())
+
+    def test_delivery_uses_actual_roles_and_files_then_requires_checks_before_deposit(self):
+        manifest = json.loads((EX / "etsy" / "produit.json").read_text("utf-8"))
+        manifest.update(kind="livre", author="")
+        created = self.c.post("/api/projects", json=manifest)
+        self.assertEqual(created.status_code, 200, created.text)
+        self.p = created.json()
+        self.base = "/api/projects/" + self.p["id"]
+        for i in range(8):
+            saved = self.request("PUT", f"/stages/{i}", json={
+                "text": f"Approved deliverable {i}. The final PDF and preview are planned.", "decision": "approve",
+            })
+            self.assertEqual(saved.status_code, 200, saved.text)
+            self.p = saved.json()
+        approved = self.p["stages"]
+        selected = self.request("PUT", "/workshop-kind", json={"kind": "imprimable"})
+        self.assertEqual(selected.status_code, 200)
+        self.p = selected.json()
+        self.assertEqual(self.p["stages"], approved)
+        self.assertEqual(self.p["manifest"]["kind"], "livre")
+
+        def delivery():
+            response = self.c.get(self.base + "/delivery")
+            self.assertEqual(response.status_code, 200, response.text)
+            state = response.json()
+            self.assertEqual(state["kind"], "imprimable")
+            self.assertEqual(state["approved_count"], 8)
+            self.assertEqual(state["blocking_count"], len(self.bad()))
+            return state
+
+        self.assertEqual(set(delivery()["missing_roles"]), {"client", "preview"})
+        self.upload("worksheet-preview.jpg", (EX / "etsy" / "worksheet-preview.jpg").read_bytes(), "preview")
+        self.upload("field-record.pdf", (EX / "etsy" / "field-record.pdf").read_bytes(), "source")
+        self.assertEqual(delivery()["missing_roles"], ["client"])
+        self.assertEqual(delivery()["next"], "fabricate")
+        file_id = self.p["files"][-1]["id"]
+        assigned = self.request("PATCH", "/files/" + file_id, json={"role": "client"})
+        self.assertEqual(assigned.status_code, 200)
+        self.p = assigned.json()
+        self.assertEqual(delivery()["next"], "check")
+        self.assertEqual(self.request("POST", "/export").status_code, 409)
+        edited = self.request("PUT", json={**self.p["manifest"], "author": "Field Record Studio"})
+        self.assertEqual(edited.status_code, 200)
+        self.p = edited.json()
+        self.assertEqual(delivery()["next"], "deposit")
+        self.assertEqual(self.p["status"], "Brouillon")
+        self.assertEqual(self.p["stages"], approved)
+        self.ready()
+        self.assertEqual(self.p["status"], "Prêt au dépôt")
+        removed = self.request("DELETE", "/files/" + file_id)
+        self.assertEqual(removed.status_code, 200)
+        self.p = removed.json()
+        self.assertEqual(delivery()["missing_roles"], ["client"])
+        self.assertEqual(self.request("POST", "/export").status_code, 409)
+        no_expected = self.request("PUT", json={**self.p["manifest"], "expected": []})
+        self.assertEqual(no_expected.status_code, 200)
+        self.p = no_expected.json()
+        self.upload("instructions.txt", b"How to use the field notebook.", "notice")
+        self.assertEqual(delivery()["missing_roles"], ["client"])
+        self.assertTrue(any("client" in error.casefold() for error in self.bad()))
+        self.assertEqual(self.request("POST", "/export").status_code, 409)
+
     def test_valid_pdf_and_original(self):
         self.demo()
         self.assertEqual(self.bad(),[])

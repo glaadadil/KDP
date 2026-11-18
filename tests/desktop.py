@@ -33,6 +33,7 @@ with tempfile.TemporaryDirectory() as folder:
             page.goto(origin);expect(page.get_by_role("heading",name="Bibliothèque",exact=True)).to_be_visible()
             page.get_by_role("button",name="Nouveau projet").click()
             page.get_by_label("Titre du produit").fill("Guide des observations")
+            page.locator('#newform select[name="channel"]').select_option("etsy")
             page.get_by_role("button",name="Créer le projet").click()
             page.get_by_label("Résultat du spécialiste").fill("Readers who keep field journals.")
             page.reload()
@@ -96,6 +97,79 @@ with tempfile.TemporaryDirectory() as folder:
             expect(page.locator("#proposal-fields input")).to_be_disabled()
             page.get_by_role("button", name="Fiche produit", exact=True).click()
             expect(page.get_by_label("Sous-titre", exact=True)).to_have_value(evidence["suggested_metadata"]["subtitle"])
+            page.get_by_label("Auteur ou marque", exact=True).fill("Field Record Studio")
+            page.get_by_label("Description commerciale", exact=True).fill("A printable field notebook for observing a local trail.")
+            page.get_by_label("Catégorie prévue", exact=True).fill("Journals")
+            page.get_by_label("Prix envisagé", exact=True).fill("6")
+            page.locator('#meta select[name="ai"]').select_option("assisted")
+            page.get_by_role("button", name="Enregistrer la fiche", exact=True).click()
+            expect(page.locator("#toast")).to_contain_text("Fiche enregistrée")
+            page.get_by_role("button", name="Atelier", exact=True).click()
+            page.locator('[data-step="2"]').click()
+            manuscript = "# Carnet de terrain\n\nPage pilote : suivre un sentier.\n\n## Observations\nNoter trois indices."
+            remaining_outputs = {
+                "Conception": "Prototype plan: two observation panels.",
+                "Pilote": "Field card prototype: record temperature and a sketch.",
+                "Revue du pilote": "Prototype review: the sketch panel passed the pencil check.",
+                "Production": manuscript,
+                "Contrôle qualité": "Verification record: pencil space confirmed in the printed trial.",
+                "Finition": "Final production note: place the editable and customer files in separate folders.",
+            }
+            for stage_name, approved_text in remaining_outputs.items():
+                expect(page.get_by_role("heading", name=stage_name, exact=True)).to_be_visible()
+                if stage_name == "Finition":
+                    page.get_by_text("Spécialité des missions", exact=True).click()
+                    page.locator("#workshop-kind").select_option("")
+                    page.locator("#apply-workshop-kind").click()
+                    expect(page.locator("#content .upper")).to_contain_text("Livre")
+                page.get_by_label("Résultat du spécialiste", exact=True).fill(approved_text)
+                page.get_by_role("button", name="Valider l’étape", exact=True).click()
+            expect(page.get_by_role("heading", name="Fabrication et livraison", exact=True)).to_be_visible()
+            expect(page.locator("#delivery-next")).to_have_attribute("data-next", "fabricate")
+            expect(page.locator(".splithead .tag")).to_have_text("Brouillon")
+            page.get_by_text("Spécialité des missions", exact=True).click()
+            page.locator("#workshop-kind").select_option("imprimable")
+            page.locator("#apply-workshop-kind").click()
+            expect(page.get_by_text("Spécialité de fabrication · Imprimable", exact=True)).to_be_visible()
+            for link, expected in (("#delivery-manuscript", [manuscript]),
+                                   ("#delivery-dossier", ["Readers who keep field journals.", evidence["deliverable"],
+                                                          *remaining_outputs.values()])):
+                with page.expect_download() as dl:
+                    page.locator(link).click()
+                downloaded = Path(dl.value.path()).read_text(encoding="utf-8")
+                if link == "#delivery-manuscript":
+                    assert downloaded == manuscript, "Download must contain exactly the approved production manuscript."
+                else:
+                    assert all(text in downloaded for text in expected), "The manufacturing dossier must retain every approved stage."
+            page.locator("#delivery-copy").click()
+            expect(page.locator("#toast")).to_contain_text("Consigne copiée")
+            manufacturing_prompt = page.evaluate("navigator.clipboard.readText()").casefold()
+            assert all(word in manufacturing_prompt for word in ("pdf", "aperçu", "fichier", "télécharge"))
+            page.get_by_role("button", name="Bibliothèque Venture Publisher").click()
+            page.get_by_role("button").filter(has=page.get_by_text("Guide des observations", exact=True)).click()
+            expect(page.locator("#delivery-next")).to_have_attribute("data-next", "fabricate")
+            page.get_by_role("button", name="Dépôt", exact=True).click()
+            expect(page.get_by_role("button", name="Télécharger le dossier ZIP")).to_be_disabled()
+            page.go_back()
+            page.locator("#delivery-files").click()
+            expect(page.get_by_role("heading", name="Fichiers de l’édition")).to_be_visible()
+            page.locator("#browse").set_input_files([ROOT / "examples/etsy/field-record.pdf", ROOT / "examples/etsy/worksheet-preview.jpg"])
+            for name, role in (("field-record.pdf", "client"), ("worksheet-preview.jpg", "preview")):
+                selector = page.get_by_label("Rôle de " + name, exact=True)
+                with page.expect_response(lambda response: response.request.method == "PATCH" and "/files/" in response.url) as result:
+                    selector.select_option(role)
+                assert result.value.ok
+            page.get_by_role("button", name="Contrôler le dossier").click()
+            expect(page.locator(".check.ok")).to_be_visible()
+            page.get_by_role("button", name="Préparer le dépôt").click()
+            expect(page.locator(".splithead .tag")).to_have_text("Brouillon")
+            with page.expect_download() as dl:
+                page.get_by_role("button", name="Télécharger le dossier ZIP").click()
+            with ZipFile(dl.value.path()) as archive:
+                shipped = json.loads(archive.read("produit.json"))
+                assert shipped["title"] == "Guide des observations"
+                assert len(shipped["declared_validations"]) == 8
+                assert {"client/field-record.pdf", "visuels/worksheet-preview.jpg"} <= set(archive.namelist())
             page.get_by_role("button",name="Bibliothèque Venture Publisher").click()
             page.get_by_role("button",name="Importer une fiche",exact=True).click()
             page.locator("#jsonfile").set_input_files(ROOT/"examples/paper/produit.json")

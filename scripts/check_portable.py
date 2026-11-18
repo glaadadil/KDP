@@ -30,6 +30,27 @@ with tempfile.TemporaryDirectory() as temp:
         for ch in ("etsy","paper","kindle","outil"):
             with opener.open(Request(base+"/api/demo/"+ch,method="POST",headers=headers)) as r:project=json.load(r)
             endpoint=base+"/api/projects/"+project["id"]
+            if ch == "etsy":
+                # Plain-text stages reproduce a completed edition from an earlier installation.
+                for index in range(8):
+                    text = f"Approved field guide content for stage {index}."
+                    approval = Request(
+                        endpoint + f"/stages/{index}",
+                        data=json.dumps({"decision": "approve", "text": text}).encode(),
+                        method="PUT",
+                        headers={**headers, "Content-Type": "application/json", "If-Match": str(project["rev"])},
+                    )
+                    with opener.open(approval) as r:
+                        project = json.load(r)
+                with opener.open(endpoint + "/delivery") as r:
+                    delivery = json.load(r)
+                    assert delivery["approved"] and delivery["next"] == "deposit"
+                    assert "fichiers téléchargeables" in delivery["prompt"]
+                with opener.open(endpoint + "/delivery/manuscript") as r:
+                    assert r.read().decode() == project["stages"][5]["text"]
+                with opener.open(endpoint + "/delivery/dossier") as r:
+                    dossier = r.read().decode()
+                    assert all(stage["text"] in dossier for stage in project["stages"])
             if ch=="paper":
                 with opener.open(endpoint+"/mission/0") as r:
                     mission = json.load(r)

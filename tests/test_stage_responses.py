@@ -71,6 +71,69 @@ class StageResponseTests(unittest.TestCase):
     def preview(self, index, text):
         return self.send("POST", f"/stages/{index}/preview", {"response": text})
 
+    def delivery(self):
+        response = self.client.get(self.base + "/delivery")
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def test_partial_legacy_edition_delivers_only_human_approved_material(self):
+        untouched = self.read()
+        state = self.delivery()
+        self.assertEqual(state["next"], "workshop")
+        self.assertEqual(state["approved_count"], 0)
+        self.assertFalse(state["manuscript_available"])
+        for route in ("manuscript", "dossier"):
+            self.assertEqual(self.client.get(self.base + "/delivery/" + route).status_code, 409)
+        self.assertEqual(self.read(), untouched)
+
+        self.save_stage(0, {"text": "Carry two blank cards.", "notes": "Accepted note 17.", "decision": "approve"})
+        self.save_stage(1, {"text": "DRAFT research claim 229", "decision": "draft"})
+        before = self.read()
+        self.assertEqual(self.delivery()["approved_count"], 1)
+        partial = self.client.get(self.base + "/delivery/dossier")
+        self.assertEqual(partial.status_code, 200)
+        self.assertIn("attachment", partial.headers["content-disposition"])
+        self.assertIn("Carry two blank cards.", partial.text)
+        self.assertIn("Accepted note 17.", partial.text)
+        self.assertNotIn("DRAFT research claim 229", partial.text)
+        self.assertEqual(self.read(), before)
+
+    def test_completed_workshop_hands_over_exact_manuscript_and_full_approved_dossier(self):
+        manuscript = "# Notes de terrain\n\n## Matin\n" + "Observe la rivière.\n" * 1900 + "\nFin du manuscrit."
+        stage_texts = [f"Original output {i} for {label}." for i, label in enumerate(self.stages)]
+        stage_texts[5] = manuscript
+        for i, text in enumerate(stage_texts):
+            if i == 5:
+                self.save_stage(i, {"response": json.dumps(self.packet(i, deliverable=text)), "decision": "draft"})
+            self.save_stage(i, {"text": text, "notes": f"Reviewed note {i}.", "decision": "approve"})
+        before = self.read()
+        state = self.delivery()
+        self.assertEqual(state["next"], "fabricate")
+        self.assertEqual(state["approved_count"], 8)
+        self.assertTrue(state["manuscript_available"])
+        self.assertEqual(set(state["missing_roles"]), {"client", "preview"})
+        self.assertEqual(state["status"], "Brouillon")
+        for word in ("PDF", "fichier", "télécharge"):
+            self.assertIn(word.casefold(), state["prompt"].casefold())
+        source = self.client.get(self.base + "/delivery/manuscript")
+        self.assertEqual(source.status_code, 200)
+        self.assertIn("attachment", source.headers["content-disposition"])
+        self.assertEqual(source.content.decode("utf-8"), manuscript)
+        dossier = self.client.get(self.base + "/delivery/dossier")
+        self.assertEqual(dossier.status_code, 200)
+        self.assertIn("attachment", dossier.headers["content-disposition"])
+        for i, original in enumerate(stage_texts):
+            self.assertIn(original, dossier.text)
+            self.assertIn(f"Reviewed note {i}.", dossier.text)
+        self.assertIn(self.packet()["handoff"], dossier.text)
+        self.assertEqual(self.read(), before)
+        rejected = self.client.post(self.base + "/export", headers={"If-Match": str(before["rev"])})
+        self.assertEqual(rejected.status_code, 409, "Stage approval alone cannot release a product.")
+        self.save_stage(2, {"text": "Replacement design.", "decision": "approve"})
+        self.assertFalse(self.delivery()["manuscript_available"])
+        self.assertEqual(self.client.get(self.base + "/delivery/manuscript").status_code, 409)
+        self.assertNotIn(manuscript, self.client.get(self.base + "/delivery/dossier").text)
+
     def test_every_specialist_gets_a_copyable_contract_for_the_current_edition(self):
         for index, label in enumerate(self.stages):
             with self.subTest(stage=label):
