@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory() as folder:
             ctx=browser.new_context(viewport={"width":1440,"height":960},accept_downloads=True,permissions=["clipboard-read","clipboard-write"])
             page=ctx.new_page();errors=[];page.on("pageerror",lambda e:errors.append(str(e)))
             page.set_default_timeout(8500)
-            page.goto(origin);expect(page.get_by_role("heading",name="Bibliothèque")).to_be_visible()
+            page.goto(origin);expect(page.get_by_role("heading",name="Bibliothèque",exact=True)).to_be_visible()
             page.get_by_role("button",name="Nouveau projet").click()
             page.get_by_label("Titre du produit").fill("Guide des observations")
             page.get_by_role("button",name="Créer le projet").click()

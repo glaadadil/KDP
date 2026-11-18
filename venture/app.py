@@ -303,7 +303,17 @@ def etsy_action(pid:str,action:Literal["draft","publish"],params:DraftParams|Con
             with store.change(pid,p["rev"]) as (c,p):
                 p["status"]="Dépôt en cours"
                 store.save(c,p,"Création du brouillon Etsy demandée")
-            listing=etsy.draft(p,params.taxonomy,params.when)
+            try:
+                listing=etsy.draft(p,params.taxonomy,params.when)
+            except HTTPException:
+                if not etsy.existing(pid,"listing"):
+                    with store.db() as c:
+                        c.execute("BEGIN IMMEDIATE")
+                        current=store.get(c,pid)
+                        if current["status"]=="Dépôt en cours":
+                            current["status"]="Prêt au dépôt"
+                            store.save(c,current,"Brouillon non créé • paramètres à vérifier")
+                raise
             state="Dépôt en cours"
         else:
             listing=etsy.live(p)

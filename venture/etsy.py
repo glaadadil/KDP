@@ -14,6 +14,9 @@ from .store import db, get, original, save
 LOCK=threading.RLock()
 API="https://openapi.etsy.com/v3/application"
 TOKEN="https://api.etsy.com/v3/public/oauth/token"
+class Rejected(HTTPException):
+    """The service rejected the request before applying it."""
+
 class Etsy:
     def __init__(self,client=None):
         self.client=client or httpx.Client(timeout=45,follow_redirects=False,trust_env=False)
@@ -71,7 +74,8 @@ class Etsy:
             r.raise_for_status()
             return r.json()
         except httpx.HTTPStatusError as e:
-            raise HTTPException(502,f"Etsy a répondu HTTP {e.response.status_code}. Vérifie la boutique et l'historique avant de reprendre.")
+            exc_type = Rejected if e.response.status_code in (400,401,403,404,413,422) else HTTPException
+            raise exc_type(502,f"Etsy a répondu HTTP {e.response.status_code}. Vérifie les paramètres et la boutique avant de reprendre.")
         except (httpx.HTTPError,ValueError):
             raise HTTPException(502,"Réponse Etsy non confirmée. Vérifie l'état dans la boutique avant de reprendre.")
 
@@ -90,7 +94,11 @@ def once(pid,op,send):
             if row["state"]=="done": return row["result"]
             raise HTTPException(409,"Une requête Etsy reste non confirmée. Rapproche son résultat depuis la boutique avant une reprise.")
         c.execute("INSERT INTO remote_ops VALUES(?,?,'pending','')",(pid,op))
-    result=str(send())
+    try:
+        result=str(send())
+    except Rejected:
+        with db() as c: c.execute("DELETE FROM remote_ops WHERE project=? AND op=? AND state='pending'",(pid,op))
+        raise
     with db() as c: c.execute("UPDATE remote_ops SET state='done',result=? WHERE project=? AND op=?",(result,pid,op))
     return result
 

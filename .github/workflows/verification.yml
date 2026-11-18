@@ -31,3 +31,49 @@ jobs:
       - run: python -m playwright install chromium
       - run: python -m unittest discover -v
       - run: python tests/desktop.py
+      - name: Construire le logiciel Windows autonome
+        if: runner.os == 'Windows'
+        run: |
+          python -m pip install pyinstaller
+          python -m PyInstaller --noconfirm --onedir --name VenturePublisher --add-data "venture/web;venture/web" --add-data "examples;examples" --collect-submodules uvicorn --collect-submodules python_multipart bureau.py
+      - name: Vérifier le logiciel Windows livré
+        if: runner.os == 'Windows'
+        run: python scripts/check_portable.py dist/VenturePublisher/VenturePublisher.exe
+      - name: Préparer le guide de démarrage
+        if: runner.os == 'Windows'
+        run: |
+          Copy-Item README.md dist/VenturePublisher/Guide.md
+          Copy-Item restaurer.py dist/VenturePublisher/restaurer.py
+          "Lancez VenturePublisher.exe. Gardez la console ouverte pendant votre travail. Les donnees sont conservees dans VenturePublisher sous votre dossier personnel." | Out-File -Encoding utf8 dist/VenturePublisher/LIRE-MOI.txt
+      - name: Distribuer le logiciel Windows
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: VenturePublisher-Windows-x64
+          path: dist/VenturePublisher/
+          retention-days: 30
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: VenturePublisher-Windows-x64
+          path: VenturePublisher
+      - name: Publier la distribution Windows vérifiée
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TESTED_SHA: ${{ github.sha }}
+        run: |
+          tag="v1.0.0"
+          if gh release view "$tag" --repo "$REPO" > /dev/null 2>&1; then
+            echo "Version existante conservée."
+            exit 0
+          fi
+          zip -qr VenturePublisher-Windows-x64.zip VenturePublisher
+          sha256sum VenturePublisher-Windows-x64.zip > SHA256SUMS.txt
+          gh release create "$tag" VenturePublisher-Windows-x64.zip SHA256SUMS.txt --repo "$REPO" --target "$TESTED_SHA" --title "Venture Publisher 1.0.0" --notes "Windows x64. Extraire toute l’archive, puis ouvrir VenturePublisher.exe. Vérifications métier, navigateur et exécutable effectuées avant publication."

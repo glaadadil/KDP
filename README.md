@@ -4,6 +4,10 @@ Application de bureau locale pour piloter un produit éditorial, préparer ses f
 
 ## Démarrer sur Windows
 
+**Version autonome x64** — Depuis les [versions du dépôt](https://github.com/glaadadil/KDP/releases), télécharge l’archive Windows publiée. Extrais **tout le ZIP**, puis ouvre `VenturePublisher.exe`. Le dossier `_internal` doit rester à côté de l’exécutable. Cette distribution contient Python et les dépendances. Pour restaurer une sauvegarde avec la version autonome, utilise `VenturePublisher.exe --restore sauvegarde.zip nouveau-dossier`.
+
+### Démarrer à partir du code source
+
 1. Installe **Python 3.11 ou 3.12** depuis [python.org](https://www.python.org/downloads/windows/) avec le lanceur Python activé.
 2. Télécharge le dépôt avec **Code → Download ZIP**, puis extrais-le dans un dossier où tu peux écrire.
 3. Double-clique sur **Demarrer-Windows.cmd**. Le premier démarrage installe les dépendances dans un environnement isolé et nécessite Internet. Les démarrages suivants réutilisent cet environnement.

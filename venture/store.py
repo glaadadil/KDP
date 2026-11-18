@@ -2,7 +2,7 @@ import hashlib
 import json
 import os
 import sqlite3
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -107,9 +107,9 @@ def backup(path):
     with NamedTemporaryFile(delete=False) as tmp:
         snapshot=Path(tmp.name)
     try:
-        with db() as c, sqlite3.connect(snapshot) as target:
+        with db() as c, closing(sqlite3.connect(snapshot)) as target:
             c.backup(target)
-        with ZipFile(path,"w",ZIP_DEFLATED) as z, sqlite3.connect(snapshot) as image:
+        with ZipFile(path,"w",ZIP_DEFLATED) as z, closing(sqlite3.connect(snapshot)) as image:
             z.write(snapshot,"catalogue.sqlite3")
             blobs=set()
             for body, in image.execute("SELECT snapshot FROM history"):
