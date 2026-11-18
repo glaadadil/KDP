@@ -31,6 +31,27 @@ with tempfile.TemporaryDirectory() as temp:
             with opener.open(Request(base+"/api/demo/"+ch,method="POST",headers=headers)) as r:project=json.load(r)
             endpoint=base+"/api/projects/"+project["id"]
             if ch=="paper":
+                with opener.open(endpoint+"/mission/0") as r:
+                    mission = json.load(r)
+                packet = mission["template"]
+                assert '"edition_id": "' + project["id"] + '"' in mission["text"]
+                packet.update(
+                    deliverable="Produce a field guide for walkers. Include two worked examples.",
+                    handoff="Collect the sources needed for two worked examples.",
+                )
+                response = json.dumps(packet)
+                json_headers = {**headers, "Content-Type": "application/json"}
+                preview = Request(endpoint+"/stages/0/preview", data=json.dumps({"response": response}).encode(), headers=json_headers)
+                with opener.open(preview) as r:
+                    assert json.load(r)["handoff"]==packet["handoff"]
+                incoming = {"decision": "draft", "response": response}
+                request = Request(
+                    endpoint+"/stages/0", data=json.dumps(incoming).encode(), method="PUT",
+                    headers={**json_headers, "If-Match": str(project["rev"])},
+                )
+                with opener.open(request) as r:
+                    project = json.load(r)
+                    assert project["stages"][0]["status"] == "review"
                 url=endpoint+"/files/"+project["files"][0]["id"]+"/page/1"
                 with opener.open(url) as r: assert r.read(4)==b"\x89PNG"
             with opener.open(endpoint+"/checks") as r:assert not any(x["level"]=="error" for x in json.load(r))

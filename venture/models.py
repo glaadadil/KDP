@@ -70,6 +70,7 @@ class RoleChange(Strict):
     role: Role
 class Result(Strict):
     text: str=Field(default="",max_length=120000)
+    response: str | None = Field(default=None, min_length=1, max_length=280000)
     notes: str=Field(default="",max_length=10000)
     decision: Literal["draft","approve","revise"]
 class Publication(Strict):

@@ -6,6 +6,8 @@ Application de bureau locale pour piloter un produit éditorial, préparer ses f
 
 **Version autonome x64** — Depuis les [versions du dépôt](https://github.com/glaadadil/KDP/releases), télécharge l’archive Windows publiée. Extrais **tout le ZIP**, puis ouvre `VenturePublisher.exe`. Le dossier `_internal` doit rester à côté de l’exécutable. Cette distribution contient Python et les dépendances. Pour restaurer une sauvegarde avec la version autonome, utilise `VenturePublisher.exe --restore sauvegarde.zip nouveau-dossier`.
 
+Pour mettre à jour une installation, ferme l’ancien lanceur, extrais la nouvelle archive dans un autre dossier et démarre le nouvel exécutable. Il retrouve les éditions enregistrées dans le même dossier de données (par défaut `VenturePublisher` sous ton dossier personnel).
+
 ### Démarrer à partir du code source
 
 1. Installe **Python 3.11 ou 3.12** depuis [python.org](https://www.python.org/downloads/windows/) avec le lanceur Python activé.
@@ -19,7 +21,7 @@ Sous Linux ou WSL2, lance `python3 lancer.py`. Avec WSL, si le navigateur Window
 
 - **Première visite.** Clique sur **Ouvrir un exemple complet**, puis choisis la destination. Chaque exemple utilise des fichiers fictifs. Contrôle-les puis télécharge le ZIP et ouvre-le pour voir les éléments à déposer. Le PDF broché de démonstration comporte 24 pages. Les fichiers sont destinés aux essais locaux.
 - **Nouveau produit.** Crée un projet et choisis la famille (livre, outil de calcul, imprimable), la destination, la langue et la version. Si les fichiers sont déjà prêts, ouvre directement **Importer**.
-- **Atelier.** Huit missions couvrent la direction, la recherche, la conception, le pilote, sa revue, la production, la qualité et la finition. Lis ou copie la consigne dans la discussion ChatGPT de ton choix. Joins les originaux utiles. Colle le livrable ou sa synthèse et conserve les fichiers modifiables avec le rôle « Source de travail ». Demande une correction ou valide. Modifier un résultat antérieur approuvé remet les étapes suivantes à relire. L’historique permet de consulter toutes les versions enregistrées.
+- **Atelier.** Huit missions couvrent la direction, la recherche, la conception, le pilote, sa revue, la production, la qualité et la finition. Chaque spécialiste reçoit les conclusions approuvées des étapes précédentes. Conserve les fichiers modifiables dans **Importer** avec le rôle « Source de travail ».
 - **Fiche.** Saisis ou ajuste les métadonnées, la devise, le prix et le rôle de l’IA. Les zones de saisie de la fiche et de l’atelier conservent le brouillon dans ce navigateur. Le bouton d’enregistrement le transfère dans la base locale et son historique. En cas de conflit entre deux onglets, la modification périmée est refusée.
 - **Import.** Utilise le sélecteur ou le glisser-déposer. Le rôle est lu dans le manifeste, sinon tu le confirmes dans la liste. Un fichier différent importé sous un nom identique crée une nouvelle version. Les anciens originaux restent téléchargeables. Les fichiers de travail sont exclus du dossier commercial.
 - **Import groupé.** Depuis la bibliothèque, ouvre **Importer une fiche**. Fournis le JSON seul, colle-le ou dépose un ZIP contenant `produit.json` et les fichiers. Pour une archive vendue telle quelle au client, dépose-la à l’intérieur du projet avec le rôle « Fichier client ».
@@ -27,6 +29,17 @@ Sous Linux ou WSL2, lance `python3 lancer.py`. Avec WSL, si le navigateur Window
 - **Publication assistée.** Télécharge le dossier ZIP, ouvre la plateforme depuis l’onglet **Dépôt**, examine les frais, les droits et les déclarations, puis renseigne le statut effectivement constaté. Le passage à « Publié » demande une référence. Chaque édition possède sa propre fiche, son historique et son suivi. Utilise **Nouvelle édition** pour adapter une version ou changer de canal.
 - **Etsy.** Le mode manuel fonctionne sans connexion. Les formats de tableur et autres sources non directement acceptées dans ce parcours sont enveloppés dans un ZIP par fichier client. Les aperçus sont séparés des fichiers achetés. Le contrôle local fixe 20 000 000 octets comme plafond prudent par téléchargement. Une notice consomme l’un des cinq emplacements.
 - **Sauvegarde.** Clique sur **Sauvegarder** pour obtenir un ZIP cohérent de la base et des originaux référencés, y compris les anciennes versions. Les formulaires encore présents uniquement dans le navigateur doivent d’abord être enregistrés.
+
+### Faire travailler les spécialistes avec ChatGPT
+
+1. Ouvre une étape dans **Atelier**, clique sur **Copier la mission** et colle-la dans ChatGPT. La consigne contient le format de réponse attendu pour cette édition et cette étape. **Télécharger le contexte complet** permet aussi de joindre les livrables précédents à la discussion.
+2. Copie toute la réponse de ChatGPT. Dans l’étape, clique sur **Importer la réponse ChatGPT**. Colle la réponse ou choisis son fichier `.json`, puis clique sur **Vérifier la réponse**.
+3. Relis le livrable et la transmission destinée au spécialiste suivant. Clique sur **Enregistrer pour validation**. L’étape passe à **À valider**. Tu peux ensuite noter une correction ou choisir **Valider l’étape** pour poursuivre. Une modification à un résultat déjà approuvé remet les étapes suivantes en relecture. Les résultats précédents restent accessibles dans **Historique**.
+4. Si le spécialiste propose un titre, une description ou d’autres changements de fiche, compare-les aux valeurs actuelles. Coche les champs à reprendre et clique sur **Appliquer les champs cochés**.
+
+Pour reprendre une ancienne réponse en prose, colle-la dans **Importer la réponse ChatGPT** et choisis **Adapter une réponse en texte libre**. Colle la consigne obtenue dans ChatGPT, puis importe la réponse convertie. Si le texte est déjà enregistré dans l’étape, tu peux laisser la zone de collage vide avant de demander la conversion. Le champ **Résultat du spécialiste** reste disponible pour la rédaction manuelle.
+
+Pour un cahier d’activités classé initialement comme livre, ouvre **Spécialité des missions**, sélectionne **Imprimable** et clique sur **Appliquer le parcours**. Les missions suivantes demanderont des éléments adaptés aux fiches et activités. Les éditions existantes conservent leurs fichiers et leur historique.
 
 ### Restaurer ou déplacer la bibliothèque
 
@@ -54,13 +67,13 @@ Le parcours en ligne requiert une application autorisée par Etsy, une boutique 
 
 Le connecteur Etsy a des tests de transport simulés. L’autorisation d’une boutique réelle et la validation commerciale finale doivent être effectuées par son propriétaire. Les tests du projet ne publient rien.
 
-## Manifeste et travail avec ChatGPT
+## Importer une fiche produit avec un manifeste
 
 Le schéma JSON complet est fourni dans [manifest.schema.json](manifest.schema.json) et par `/api/schema` dans l’application. [Exemple broché](examples/paper/produit.json) · [Exemple Etsy](examples/etsy/produit.json) · [Exemple Kindle](examples/kindle/produit.json).
 
 Les attributs minimaux sont `schema_version` (valeur `1.0`), `title`, `kind`, `channel` et `version`. Le système crée un identifiant si `product_id` est omis. Conserve cet identifiant pour relier les éditions d’une même œuvre. Le triplet identifiant, canal, version est unique. La liste `expected` décrit les noms de fichiers et leurs rôles. Les champs inconnus et les noms incohérents sont rejetés. Une fiche importée démarre au brouillon et ses conclusions déclarées restent consultatives. Les contrôles sont exécutés sur les fichiers locaux.
 
-Consigne de remise recommandée à l’équipe éditoriale :
+Pour préparer une fiche complète à importer depuis la bibliothèque, donne cette consigne à l’équipe éditoriale.
 
 > Prépare produit.json au format du schéma Venture Publisher joint. Conserve les noms exacts des fichiers, la langue, le prix et la version approuvés. Décris séparément tous les fichiers attendus, les contrôles effectivement réalisés et les validations humaines reçues. Indique unknown pour tout usage de l’IA qui doit être clarifié. Fournis le JSON en UTF-8. Joins le schéma et le dernier manifeste quand ils sont disponibles.
 
