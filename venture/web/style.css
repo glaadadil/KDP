@@ -43,6 +43,7 @@ header{height:72px;border-bottom:1px solid var(--line);background:var(--card);di
 .delivery-preview > * + * { margin-top: 7px; }
 .delivery .workshop-kind { margin-top: 10px; padding-top: 10px; }
 .delivery .workshop-kind form { max-width: 360px; }
+.delivery-specialty { padding-block: 15px; }
 .delivery-files { list-style: none; margin: 0; padding: 0; }
 .delivery-files li {
   display: flex;
