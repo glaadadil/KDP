@@ -89,7 +89,7 @@ function demoForm(){
  modal("Explorer un exemple",`<p>Choisis une édition de démonstration. Ses fichiers et sa fiche seront ajoutés à ta bibliothèque.</p><div class="actions">${Object.entries({...cfg.channels,outil:"Outil de calcul Etsy"}).map(([k,v])=>`<button data-demo="${k}">${v}</button>`).join("")}</div>`);
  bind("[data-demo]","click",async(e,el)=>{el.disabled=true;try{const x=await api("/demo/"+el.dataset.demo,"POST");close();go(x.id,"controle")}finally{el.disabled=false}});
 }
-function guide(){return '<div class="stack"><p><b>Atelier.</b> Choisis une mission, copie-la dans ChatGPT et joins les originaux utiles. Rapporte le livrable et valide ou demande une correction.</p><p><b>Importer.</b> Dépose les fichiers prêts. Attribue à chacun un rôle. Remplacer un nom identique conserve la version précédente.</p><p><b>Contrôler et déposer.</b> Corrige les erreurs, prépare le ZIP et examine les points humains. Déclare le statut après confirmation sur Etsy ou KDP.</p><p><b>Sauvegarder.</b> Télécharge une sauvegarde complète du catalogue et des originaux. La procédure de restauration figure dans le README fourni.</p></div>'}
+function guide(){return '<div class="stack"><p><b>Atelier.</b> Copie la mission dans ChatGPT, puis ouvre « Importer la réponse ChatGPT ». Colle sa réponse, vérifie l’aperçu et enregistre-la. La validation de l’étape t’appartient.</p><p><b>Importer.</b> Dépose les fichiers prêts. Attribue à chacun un rôle. Remplacer un nom identique conserve la version précédente.</p><p><b>Contrôler et déposer.</b> Corrige les erreurs, prépare le ZIP et examine les points humains. Déclare le statut après confirmation sur Etsy ou KDP.</p><p><b>Sauvegarder.</b> Télécharge une sauvegarde complète du catalogue et des originaux. La procédure de restauration figure dans le README fourni.</p></div>'}
 async function route(){
  const generation=++routeGeneration;const [,id,requested]=location.hash.slice(1).split("/");close();
  if(!id){await library();return}
@@ -104,15 +104,280 @@ function edition(){
  modal("Créer une édition",`<form id="editionform" class="stack"><label>Version<input name="version" required placeholder="Ex. 1.1"></label><label>Destination<select name="channel">${opt(cfg.channels,p.manifest.channel)}</select></label><p>Les fichiers et les étapes sont repris. Le suivi de publication démarre au brouillon.</p><button class="primary">Créer l’édition</button></form>`);
  bind("#editionform","submit",async e=>{e.preventDefault();const x=await api(pp()+"/edition","POST",Object.fromEntries(new FormData(e.target)));close();go(x.id,"fiche")});
 }
+const proposalLabels = {
+  title: "Titre",
+  subtitle: "Sous-titre",
+  description: "Description",
+  category: "Catégorie",
+  keywords: "Mots-clés"
+};
+
+function readableValue(value) {
+  return Array.isArray(value) ? value.join(" · ") : String(value ?? "");
+}
+
+function proposalEntries(packet) {
+  return Object.entries(packet?.suggested_metadata || {})
+    .filter(([key, value]) => Object.hasOwn(proposalLabels, key) && value != null && readableValue(value));
+}
+
+function metadataDraftValue(value) {
+  return Array.isArray(value) ? value.join("\n") : String(value ?? "");
+}
+
+function packetDetails(packet, editableProposals=false) {
+  if (!packet) return "";
+  const groups = [
+    ["Orientations et décisions", packet.decisions],
+    ["Questions ouvertes", packet.open_questions],
+    ["Sources indiquées", packet.sources],
+    ["Contrôles déclarés par le spécialiste", packet.checks]
+  ];
+  const lists = groups.filter(([, items]) => items?.length).map(([title, items]) =>
+    `<details class="packet-list"><summary>${esc(title)} (${items.length})</summary>
+       <ul>${items.map(item => `<li>${esc(item)}</li>`).join("")}</ul></details>`
+  ).join("");
+  const proposals = proposalEntries(packet);
+  const suggested = proposals.map(([key, value]) => {
+    const current = readableValue(p.manifest[key]);
+    const target = readableValue(value);
+    if (!editableProposals) {
+      return `<div class="packet-value"><b>${proposalLabels[key]}</b><p>${esc(target)}</p></div>`;
+    }
+    return `<label class="proposal-row"><input type="checkbox" name="field" value="${key}" ${current===target?"disabled":""}>
+      <span><b>${proposalLabels[key]}</b><small>Valeur actuelle · ${esc(current || "Non renseignée")}</small>
+      <span class="packet-value">${esc(target)}</span></span></label>`;
+  }).join("");
+  const fields = proposals.length ? (editableProposals
+    ? `<fieldset id="proposal-fields" class="proposal-fields"><legend>Propositions pour la fiche produit</legend>
+       ${suggested}<button type="button" id="apply-proposals" disabled>Appliquer les champs cochés</button></fieldset>`
+    : `<details class="packet-list"><summary>Propositions pour la fiche produit (${proposals.length})</summary>${suggested}</details>`)
+    : "";
+  return `<section class="packet-section"><h3>Transmission à l’étape suivante</h3>
+    <p class="packet-value">${esc(packet.handoff)}</p>${lists}${fields}</section>`;
+}
+
+async function showCopiedPrompt(text, success) {
+  try {
+    await navigator.clipboard.writeText(text);
+    note(success);
+  } catch {
+    const fallback='<label id="copy-manually">Consigne à sélectionner et copier<textarea id="copy-prompt" rows="10" readonly></textarea></label>';
+    if (dlg.open) {
+      $("#copy-manually")?.remove();
+      $("#dialog-note").insertAdjacentHTML("beforebegin",fallback);
+    } else {
+      modal("Copier la consigne",fallback);
+    }
+    const prompt=$("#copy-prompt");
+    prompt.value=text;
+    prompt.focus();
+    prompt.select();
+  }
+}
+
+function isStagePacket(text) {
+  return /"protocol"\s*:\s*"venture\.stage\.v1"/.test(text) && /"edition_id"\s*:/.test(text);
+}
+
+function importStageReply(clearManualDraft, initial="", fromManualField=false) {
+  const index=stageIndex;
+  const project=p.id;
+  const endpoint=pp()+"/stages/"+index;
+  const missionPath=pp()+"/mission/"+index;
+  const stage=p.stages[index];
+  const manual=$("#stageform");
+  const manualText=fromManualField ? stage.text : manual.elements.text.value;
+  const notes=manual.elements.notes.value;
+  const unsaved=manualText!==stage.text || notes!==stage.notes;
+  const key=project+"/reply/"+index;
+  modal("Importer la réponse ChatGPT", `<div class="stack">
+    <p><b>${esc(cfg.stages[index])}</b> · ${esc(p.manifest.title)} · v${esc(p.manifest.version)}</p>
+    <form id="reply-source" class="stack">
+      <label>Réponse de ChatGPT<textarea id="stage-reply" name="response" rows="7" autofocus placeholder="Colle toute la réponse à la mission."></textarea></label>
+      <label>Ou choisir un fichier JSON<input type="file" id="stage-reply-file" accept=".json,application/json"></label>
+      <div class="line"><button class="primary" id="preview-stage-reply">Vérifier la réponse</button>
+      <button type="button" id="conversion">Adapter une réponse en texte libre</button></div>
+    </form>
+    <div id="reply-preview" hidden></div>
+  </div>`);
+  const form=$("#reply-source");
+  const area=$("#stage-reply");
+  const preview=$("#reply-preview");
+  const clearReply=draftForm("#reply-source",key);
+  if (initial && (area.value===initial || !area.value || confirm("Remplacer le brouillon de réponse à importer par le texte que tu viens de coller ?"))) {
+    area.value=initial;
+    area.dispatchEvent(new Event("input",{bubbles:true}));
+  }
+  const active=()=>dlg.open && form.isConnected && p?.id===project && stageIndex===index;
+  let validated="";
+  let attempt=0;
+  function invalidate() {
+    validated="";
+    attempt++;
+    preview.hidden=true;
+    preview.replaceChildren();
+    $("#copy-manually")?.remove();
+    $("#dialog-note").hidden=true;
+  }
+  bind("#stage-reply","input",invalidate);
+  bind("#stage-reply-file","change",async(e,el)=>{
+    const file=el.files[0];
+    if (!file) return;
+    if (file.size>2_000_000) throw Error("Ce fichier est trop volumineux pour une réponse d’atelier (2 Mo maximum).");
+    const text=await file.text();
+    if (active()) {
+      area.value=text;
+      area.dispatchEvent(new Event("input",{bubbles:true}));
+    }
+  });
+  bind("#conversion","click",async()=>{
+    const pasted=area.value.trim();
+    const prompt=await api(missionPath+"?convert=true"+(pasted?"&include_current=false":""));
+    if (!active()) return;
+    const full=pasted ? prompt.text+"\n\nTexte source à convertir\n"+pasted : prompt.text;
+    await showCopiedPrompt(full,"Consigne de conversion copiée. Colle-la dans ChatGPT puis rapporte sa réponse ici.");
+  });
+  bind("#reply-source","submit",async e=>{
+    e.preventDefault();
+    const raw=area.value;
+    if (!raw.trim()) throw Error("Colle la réponse ou choisis son fichier JSON.");
+    if (raw.length>280000 && Array.from(raw).length>280000) throw Error("La réponse dépasse 280 000 caractères. Demande à ChatGPT de la raccourcir.");
+    const serial=++attempt;
+    const packet=await api(endpoint+"/preview","POST",{response:raw});
+    if (!active() || attempt!==serial || area.value!==raw) return;
+    validated=raw;
+    $("#dialog-note").hidden=true;
+    preview.hidden=false;
+    preview.innerHTML=`<div class="stack"><h3 tabindex="-1">Aperçu du résultat</h3>
+      <details open><summary>Livrable de ${esc(packet.stage)}</summary><pre class="reply-text">${esc(packet.deliverable)}</pre></details>
+      ${packetDetails(packet)}
+      ${stage.text?'<p>Le résultat actuel restera consultable dans l’historique de l’édition.</p>':""}
+      ${stage.status==="approved"?'<p>Cette étape et les étapes approuvées qui la suivent repasseront en relecture.</p>':""}
+      ${unsaved?'<p class="notice">Ton brouillon de saisie sera enregistré dans l’historique avant l’importation.</p>':""}
+      <button class="primary" id="save-stage-reply">Enregistrer pour validation</button></div>`;
+    $("h3",preview).focus();
+    bind("#save-stage-reply","click",async(ev,button)=>{
+      if (!active() || validated!==area.value) return;
+      const response=validated;
+      button.disabled=true;
+      for (const field of form.elements) field.disabled=true;
+      try {
+        if (unsaved) {
+          const saved=await api(endpoint,"PUT",{text:manualText,notes,decision:"draft"},true);
+          if (p?.id!==project) return;
+          p=saved;
+          if (!active()) return;
+        }
+        const updated=await api(endpoint,"PUT",{response,notes,decision:"draft"},true);
+        if (p?.id!==project) return;
+        p=updated;
+        if (!active()) return;
+        clearManualDraft();
+        clearReply();
+        close();
+        await route();
+        note("Réponse enregistrée. Relis le résultat puis valide l’étape.");
+      } finally {
+        button.disabled=false;
+        for (const field of form.elements) field.disabled=false;
+      }
+    },preview);
+  });
+}
+
 async function workshop(){
- const s=p.stages[stageIndex],name=cfg.stages[stageIndex];
- $("#content").innerHTML=`<div class="two"><aside class="stages">${cfg.stages.map((v,i)=>`<button data-step="${i}" class="${i===stageIndex?"sel":""}"><span>${esc(v)}</span><small>${p.stages[i].status==="approved"?"✓":i+1}</small></button>`).join("")}</aside><section class="panel stack"><div><span class="upper">Mission ${stageIndex+1} sur 8</span><h2>${esc(name)}</h2></div><span class="tag">${statuses[s.status]}</span><div class="line"><button class="primary" id="copy">Copier la mission</button><button id="viewMission">Lire la consigne</button></div><form id="stageform" class="stack"><label>Résultat du spécialiste<textarea name="text" rows="8" placeholder="Colle le livrable ou sa synthèse et joins ses fichiers dans Importer.">${esc(s.text)}</textarea></label><label>Corrections ou observations<textarea name="notes" rows="3">${esc(s.notes)}</textarea></label><div class="actions"><button data-decision="draft">Enregistrer</button><button data-decision="revise">Demander une correction</button><button class="primary" data-decision="approve">Valider l’étape</button></div></form></section></div>`;
- const clear=draftForm("#stageform",p.id+"/stage/"+stageIndex);
- bind("[data-step]","click",async(e,el)=>{stageIndex=Number(el.dataset.step);await workshop()});
- const prompt=async()=>(await api(pp()+"/mission/"+stageIndex)).text;
- bind("#viewMission","click",async()=>modal(name,`<pre>${esc(await prompt())}</pre>`));
- bind("#copy","click",async()=>{const text=await prompt();try{await navigator.clipboard.writeText(text);note("Mission copiée. Tu peux la coller dans ChatGPT.")}catch{modal("Copier la mission",`<textarea rows="14">${esc(text)}</textarea>`);$("#modal-body textarea").select()}});
- bind("#stageform","submit",async e=>{e.preventDefault();const decision=e.submitter.dataset.decision;p=await api(pp()+"/stages/"+stageIndex,"PUT",{...Object.fromEntries(new FormData(e.target)),decision},true);clear();if(decision==="approve" && stageIndex<7)stageIndex++;await route();note("Étape enregistrée.")});
+  const stage=p.stages[stageIndex];
+  const name=cfg.stages[stageIndex];
+  const stages=cfg.stages.map((title,i)=>
+    `<button data-step="${i}" class="${i===stageIndex?"sel":""}"><span>${esc(title)}</span>
+     <small>${p.stages[i].status==="approved"?"✓":i+1}</small></button>`
+  ).join("");
+  $("#content").innerHTML=`<div class="two"><aside>
+      <nav class="stages" aria-label="Étapes de production">${stages}</nav>
+      <details class="workshop-kind"><summary>Spécialité des missions</summary>
+        <form id="kind-form" class="stack"><label>Parcours de production<select id="workshop-kind" name="kind">
+          ${opt({"":"Selon la fiche · "+kinds[p.manifest.kind],...kinds},p.workshop_kind??"")}
+        </select></label><button id="apply-workshop-kind">Appliquer le parcours</button></form>
+      </details>
+    </aside><section class="panel stack">
+      <div><span class="upper">Mission ${stageIndex+1} sur ${cfg.stages.length} · ${esc(kinds[p.workshop_kind || p.manifest.kind])}</span><h2>${esc(name)}</h2></div>
+      <span class="tag">${statuses[stage.status]}</span>
+      <div class="line"><button class="primary" id="copy">Copier la mission</button>
+        <button id="import-stage">Importer la réponse ChatGPT</button><button id="viewMission" class="link">Lire la consigne</button></div>
+      <p class="sub">Colle la mission dans ChatGPT, puis rapporte sa réponse. Tu peux aussi joindre le dossier de contexte si le spécialiste a besoin des livrables complets.</p>
+      <a class="link" href="/api${pp()}/mission/${stageIndex}/context" download>Télécharger le contexte complet</a>
+      <form id="stageform" class="stack"><label>Résultat du spécialiste<textarea name="text" rows="7" placeholder="Saisie manuelle ou livrable existant">${esc(stage.text)}</textarea></label>
+        <label>Corrections ou observations<textarea name="notes" rows="3">${esc(stage.notes)}</textarea></label>
+        <div class="actions"><button data-decision="draft">Enregistrer</button><button data-decision="revise">Demander une correction</button>
+        <button class="primary" data-decision="approve">Valider l’étape</button></div></form>
+      ${packetDetails(stage.packet,true)}
+    </section></div>`;
+  const clear=draftForm("#stageform",p.id+"/stage/"+stageIndex);
+  bind("[data-step]","click",async(e,el)=>{stageIndex=Number(el.dataset.step);await workshop()});
+  const missionPath=pp()+"/mission/"+stageIndex;
+  bind("#viewMission","click",async()=>modal(name,`<pre>${esc((await api(missionPath)).text)}</pre>`));
+  bind("#copy","click",async()=>showCopiedPrompt((await api(missionPath)).text,"Mission copiée. Colle-la dans ChatGPT."));
+  bind("#import-stage","click",()=>importStageReply(clear));
+  bind("#stageform [name=text]","paste",e=>{
+    const pasted=e.clipboardData?.getData("text") || "";
+    if (!isStagePacket(pasted)) return;
+    e.preventDefault();
+    importStageReply(clear,pasted);
+  });
+  bind("#kind-form","submit",async e=>{
+    e.preventDefault();
+    const kind=$("#workshop-kind").value || null;
+    p=await api(pp()+"/workshop-kind","PUT",{kind},true);
+    await workshop();
+    note("Parcours enregistré. La prochaine consigne utilisera cette spécialité.");
+  });
+  bind("#proposal-fields input","change",()=>{
+    $("#apply-proposals").disabled=!$("#proposal-fields input:checked");
+  });
+  bind("#apply-proposals","click",async(e,button)=>{
+    const fields=$$("#proposal-fields input:checked").map(input=>input.value);
+    if (!fields.length) return;
+    const draftName="venture:draft:"+p.id+"/meta";
+    const readDraft=()=>JSON.parse(localStorage.getItem(draftName)||"{}") || {};
+    const draft=readDraft();
+    const proposed=stage.packet.suggested_metadata;
+    const changed=fields.filter(key=>Object.hasOwn(draft,key)
+      && draft[key]!==metadataDraftValue(p.manifest[key])
+      && draft[key]!==metadataDraftValue(proposed[key]));
+    if (changed.length && !confirm("Remplacer aussi ton brouillon de fiche pour les champs « "+changed.map(key=>proposalLabels[key]).join(" », « ")+" » ?")) return;
+    button.disabled=true;
+    try {
+      p=await api(pp()+"/stages/"+stageIndex+"/apply-metadata","POST",{fields},true);
+      const latest=readDraft();
+      for (const key of fields) {
+        if (latest[key]===draft[key]) delete latest[key];
+      }
+      if (Object.keys(latest).length) localStorage.setItem(draftName,JSON.stringify(latest));
+      else localStorage.removeItem(draftName);
+      await route();
+      note("Les champs sélectionnés ont été enregistrés dans la fiche produit.");
+    } finally {
+      if (button.isConnected) button.disabled=false;
+    }
+  });
+  bind("#stageform","submit",async e=>{
+    e.preventDefault();
+    const decision=e.submitter?.dataset.decision || "draft";
+    const fields=Object.fromEntries(new FormData(e.target));
+    if (fields.text!==stage.text && isStagePacket(fields.text)) {
+      importStageReply(clear,fields.text,true);
+      return;
+    }
+    if (stage.packet && fields.text!==stage.text) {
+      if (!confirm("Enregistrer ta nouvelle rédaction comme résultat manuel ? La transmission structurée précédente restera dans l’historique.")) return;
+    }
+    p=await api(pp()+"/stages/"+stageIndex,"PUT",{...fields,decision},true);
+    clear();
+    if (decision==="approve" && stageIndex<cfg.stages.length-1) stageIndex++;
+    await route();
+    note("Étape enregistrée.");
+  });
 }
 function metadata(){
  const m=p.manifest;

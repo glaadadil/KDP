@@ -11,14 +11,15 @@ from typing import Literal
 from zipfile import ZIP_DEFLATED, ZipFile
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from pydantic import Field
+from pydantic import Field, ValidationError
 from . import etsy, quality, store
 from .models import *
-from .workshop import STAGES,mission
+from .workshop import STAGES, complete_context, mission
+from .stage_reply import ApplySuggestions, RawStageReply, WorkshopKind, parse_reply, reply_template
 
 BASE=Path(__file__).resolve().parent
 @asynccontextmanager
@@ -104,6 +105,8 @@ def edition(pid:str,new:Edition):
         p=store.get(c,pid)
         m={**p["manifest"],**new.model_dump()}
         copy=store.make(m)
+        if p.get("workshop_kind"):
+            copy["workshop_kind"] = p["workshop_kind"]
         copy["files"]=p["files"]
         copy["stages"]=p["stages"]
         if m["channel"]!=p["manifest"]["channel"]:
@@ -168,26 +171,116 @@ def archive(pid:str,fid:str,if_match:str=Header()):
         f["active"]=False
         return store.save(c,p,"Fichier retiré de l'édition • "+f["name"])
 
+def stage_name(index):
+    if not 0 <= index < len(STAGES):
+        raise HTTPException(404, "Étape inconnue.")
+    return STAGES[index][0]
+
+
+def validate_reply(text, pid, name):
+    try:
+        return parse_reply(text, pid, name)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.put("/api/projects/{pid}/workshop-kind")
+def change_workshop_kind(pid: str, body: WorkshopKind, if_match: str = Header()):
+    with store.change(pid, revision(if_match)) as (c, project):
+        if project.get("workshop_kind") == body.kind:
+            return project
+        project["workshop_kind"] = body.kind
+        effective = body.kind or project["manifest"]["kind"]
+        return store.save(c, project, "Spécialité des missions modifiée • " + effective)
+
+
 @app.get("/api/projects/{pid}/mission/{index}")
-def get_mission(pid:str,index:int):
-    if not 0<=index<len(STAGES): raise HTTPException(404,"Étape inconnue.")
-    return {"text":mission(read(pid),index)}
+def get_mission(pid: str, index: int, convert: bool = False, include_current: bool = True):
+    name = stage_name(index)
+    project = read(pid)
+    return {
+        "text": mission(project, index, convert=convert, include_current=include_current),
+        "template": reply_template(pid, name),
+    }
+
+
+@app.get("/api/projects/{pid}/mission/{index}/context")
+def mission_context(pid: str, index: int):
+    stage_name(index)
+    return PlainTextResponse(
+        complete_context(read(pid), index),
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="contexte-etape-{index+1}.md"'},
+    )
+
+
+@app.post("/api/projects/{pid}/stages/{index}/preview")
+def preview_reply(pid: str, index: int, body: RawStageReply):
+    name = stage_name(index)
+    read(pid)
+    return validate_reply(body.response, pid, name)
+
 
 @app.put("/api/projects/{pid}/stages/{index}")
-def stage(pid:str,index:int,body:Result,if_match:str=Header()):
-    with store.change(pid,revision(if_match)) as (c,p):
-        if not 0<=index<len(STAGES): raise HTTPException(404,"Étape inconnue.")
-        if body.decision=="approve" and not body.text: raise HTTPException(422,"Ajoute le livrable avant validation.")
-        if body.decision=="revise" and not body.notes: raise HTTPException(422,"Indique la correction demandée.")
-        if body.decision=="approve" and any(s["status"]!="approved" for s in p["stages"][:index]):
-            raise HTTPException(409,"Valide les étapes précédentes avant celle-ci.")
-        state={"approve":"approved","revise":"revise","draft":"review"}[body.decision]
-        revised=p["stages"][index]!=dict(text=body.text,notes=body.notes,status=state)
-        if revised:
-            for s in p["stages"][index+1:]:
-                if s["status"]=="approved": s["status"]="review"
-        p["stages"][index]=dict(text=body.text,notes=body.notes,status=state)
-        return store.save(c,p,STAGES[index][0]+" • "+{"approved":"validé","review":"enregistré","revise":"correction demandée"}[state])
+def stage(pid: str, index: int, body: Result, if_match: str = Header()):
+    name = stage_name(index)
+    with store.change(pid, revision(if_match)) as (c, project):
+        previous = project["stages"][index]
+        if body.response is not None:
+            if body.decision != "draft" or body.text:
+                raise HTTPException(422, "Importe une réponse seule pour relecture. La validation est une action distincte.")
+            packet = validate_reply(body.response, pid, name)
+            text = packet["deliverable"]
+        else:
+            text = body.text
+            # A changed free-text deliverable no longer matches the original machine handoff.
+            # Its exact earlier packet remains in the revision history.
+            packet = previous.get("packet") if previous["text"] == text else None
+        if body.decision == "approve":
+            if not text:
+                raise HTTPException(422, "Ajoute le livrable avant validation.")
+            if any(s["status"] != "approved" for s in project["stages"][:index]):
+                raise HTTPException(409, "Valide les étapes précédentes avant celle-ci.")
+        elif body.decision == "revise" and not body.notes:
+            raise HTTPException(422, "Indique la correction demandée.")
+        state = {"approve": "approved", "revise": "revise", "draft": "review"}[body.decision]
+        notes = previous["notes"] if body.response is not None and "notes" not in body.model_fields_set else body.notes
+        next_stage = {"text": text, "notes": notes, "status": state}
+        if packet is not None:
+            next_stage["packet"] = packet
+        if previous == next_stage:
+            return project
+        for later in project["stages"][index+1:]:
+            if later["status"] == "approved":
+                later["status"] = "review"
+        project["stages"][index] = next_stage
+        message = (
+            "réponse structurée importée pour relecture" if body.response is not None
+            else {"approved": "validé", "review": "enregistré", "revise": "correction demandée"}[state]
+        )
+        return store.save(c, project, f"{name} • {message}")
+
+
+@app.post("/api/projects/{pid}/stages/{index}/apply-metadata")
+def apply_stage_metadata(pid: str, index: int, body: ApplySuggestions, if_match: str = Header()):
+    name = stage_name(index)
+    with store.change(pid, revision(if_match)) as (c, project):
+        packet = project["stages"][index].get("packet") or {}
+        proposed = packet.get("suggested_metadata", {})
+        if not set(body.fields).issubset(proposed):
+            raise HTTPException(422, "Sélectionne uniquement des champs proposés dans la réponse importée.")
+        edited = dict(project["manifest"])
+        edited.update({key: proposed[key] for key in body.fields})
+        try:
+            updated = Manifest.model_validate(edited).model_dump()
+        except ValidationError as exc:
+            raise HTTPException(422, "Les valeurs sélectionnées sont incompatibles avec la fiche produit.") from exc
+        if project["manifest"] == updated:
+            return project
+        editable(project)
+        project["manifest"] = updated
+        return store.save(c, project, f"{name} • suggestions appliquées à la fiche : " + ", ".join(body.fields))
+
 
 @app.get("/api/projects/{pid}/checks")
 def checks(pid:str): return quality.rows(read(pid))

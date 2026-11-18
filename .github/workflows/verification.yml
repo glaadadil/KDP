@@ -69,11 +69,11 @@ jobs:
           REPO: ${{ github.repository }}
           TESTED_SHA: ${{ github.sha }}
         run: |
-          tag="v1.0.0"
+          tag="v1.1.0"
           if gh release view "$tag" --repo "$REPO" > /dev/null 2>&1; then
             echo "Version existante conservée."
             exit 0
           fi
           zip -qr VenturePublisher-Windows-x64.zip VenturePublisher
           sha256sum VenturePublisher-Windows-x64.zip > SHA256SUMS.txt
-          gh release create "$tag" VenturePublisher-Windows-x64.zip SHA256SUMS.txt --repo "$REPO" --target "$TESTED_SHA" --title "Venture Publisher 1.0.0" --notes "Windows x64. Extraire toute l’archive, puis ouvrir VenturePublisher.exe. Vérifications métier, navigateur et exécutable effectuées avant publication."
+          gh release create "$tag" VenturePublisher-Windows-x64.zip SHA256SUMS.txt --repo "$REPO" --target "$TESTED_SHA" --title "Venture Publisher 1.1.0" --notes "Windows x64. Extraire toute l’archive, puis ouvrir VenturePublisher.exe. L’Atelier prépare des consignes avec un retour JSON directement importable et vérifie sa destination. Les anciennes éditions restent accessibles."
