@@ -51,8 +51,9 @@ with tempfile.TemporaryDirectory() as folder:
             expect(page.get_by_text("interior.pdf",exact=True)).to_be_visible()
             page.get_by_role("button",name="Aperçu",exact=True).first.click()
             expect(page.get_by_alt_text("Page 1 du PDF")).to_be_visible()
-            page.get_by_role("button",name="Page suivante").click()
-            page.wait_for_function("document.querySelector('dialog img')?.naturalWidth > 0")
+            with page.expect_response(lambda r:r.url.endswith("/page/2")) as rendered:
+                page.get_by_role("button",name="Page suivante").click()
+            assert rendered.value.ok and rendered.value.body().startswith(b"\x89PNG")
             expect(page.get_by_alt_text("Page 2 du PDF")).to_be_visible()
             page.get_by_role("button",name="Fermer",exact=True).click()
             page.get_by_role("button",name="Contrôler le dossier").click()
