@@ -143,17 +143,18 @@ def _stage_context(stage, budget, *, latest=False):
     return "\n".join(lines)
 
 
-def complete_context(project, index):
+def complete_context(project, index, *, approved_only=False):
     """Markdown attachment with exact text. Default prompts remain compact."""
     m = project["manifest"]
-    parts = [f"# {m['title']} — {STAGES[index][0]}", f"Version {m['version']} · {m['channel']}",
+    title = "Dossier de fabrication" if approved_only else STAGES[index][0]
+    parts = [f"# {m['title']} — {title}", f"Version {m['version']} · {m['channel']}",
              "## Brief de l’édition", m.get("brief") or m.get("description") or "Non renseigné."]
     for pos, stage in enumerate(project["stages"][:index+1]):
-        if pos < index and stage["status"] != "approved":
+        if (approved_only or pos < index) and stage["status"] != "approved":
             continue
         if not stage["text"] and not stage["notes"]:
             continue
-        label = "Étape en cours" if pos == index else "Étape validée dans l’application"
+        label = "Étape validée dans l’application" if approved_only or pos < index else "Étape en cours"
         parts.extend([f"## {label} · {STAGES[pos][0]}", stage["text"]])
         if stage.get("packet"):
             extra = {k:v for k,v in stage["packet"].items() if k not in ("deliverable",)}

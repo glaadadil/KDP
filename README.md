@@ -41,6 +41,15 @@ Pour reprendre une ancienne réponse en prose, colle-la dans **Importer la répo
 
 Pour un cahier d’activités classé initialement comme livre, ouvre **Spécialité des missions**, sélectionne **Imprimable** et clique sur **Appliquer le parcours**. Les missions suivantes demanderont des éléments adaptés aux fiches et activités. Les éditions existantes conservent leurs fichiers et leur historique.
 
+### Après la huitième étape
+
+Une fois **Finition** validée, l’application ouvre **Fabrication et livraison**. Tu peux également rouvrir une ancienne édition terminée et accéder à l’onglet **Fabrication**. Le manuscrit, le contrôle qualité et les décisions déjà enregistrées servent de point de départ.
+
+1. Télécharge le **dossier de fabrication**. Il contient les résultats approuvés dans leur intégralité, avec les corrections du contrôle qualité. Le manuscrit approuvé à l’étape **Production** est aussi téléchargeable séparément. Ces documents de travail te permettent de relire le contenu avant la mise en page.
+2. Si les fichiers restent à fabriquer, copie la **consigne de fabrication** dans ChatGPT et joins le dossier téléchargé. Pour un imprimable, demande les épreuves aux formats décidés, la source modifiable et un aperçu commercial. Ouvre les fichiers obtenus et vérifie les pages, les corrigés et la lisibilité à la taille d’impression prévue. Si tu as déjà les fichiers, passe directement à leur importation.
+3. Dans **Importer**, ajoute les fichiers réels et attribue leurs rôles. Pour Etsy, chaque PDF à remettre à l’acheteur est un **Fichier client**, l’image de présentation est une **Image commerciale** et le document modifiable peut être conservé comme **Source de travail**.
+4. Consulte **Contrôler**, corrige les points bloquants et vérifie les épreuves. Dans **Dépôt**, télécharge le ZIP destiné à la plateforme et ouvre-le pour vérifier son contenu. Le statut publié se confirme après le dépôt effectif.
+
 ### Restaurer ou déplacer la bibliothèque
 
 Par défaut, le catalogue et les originaux se trouvent dans **VenturePublisher** sous ton dossier personnel. Les projets ne sont jamais écrits dans le dépôt par l’application. Le ZIP de sauvegarde contient tes manuscrits et ton historique et doit être conservé dans un emplacement privé.

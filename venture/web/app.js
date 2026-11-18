@@ -8,7 +8,7 @@ const kinds={livre:"Livre",outil:"Outil de calcul",imprimable:"Imprimable"};
 const ai={unknown:"À préciser",none:"Aucune",assisted:"Assistance à la création",generated:"Contenu généré"};
 const statuses={open:"À faire",review:"À valider",approved:"Validé",revise:"À corriger"};
 const levels={ok:"Conforme",warning:"Avertissement",error:"Bloquant",human:"Vérification humaine"};
-const tabs={atelier:"Atelier",fiche:"Fiche produit",fichiers:"Importer",controle:"Contrôler",depot:"Dépôt",historique:"Historique"};
+const tabs={atelier:"Atelier",fabrication:"Fabrication",fiche:"Fiche produit",fichiers:"Importer",controle:"Contrôler",depot:"Dépôt",historique:"Historique"};
 let cfg,p,stageIndex=0,all=[],timer,routeGeneration=0,filter="",search="";
 const main=$("#main"),dlg=$("#modal");
 function note(text,error=false){
@@ -55,7 +55,7 @@ function draftForm(selector,key){
 }
 function go(id,tab="atelier"){location.hash=id?"/"+id+"/"+tab:"/"}
 function date(s){return new Date(s).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"})}
-function nextTab(x){if(x.status==="Correction nécessaire")return "controle";if(x.status!=="Brouillon")return "depot";return x.files?"controle":"atelier"}
+function nextTab(x){if(x.status==="Correction nécessaire")return "controle";if(x.status!=="Brouillon")return "depot";if(x.progress===cfg.stages.length)return "fabrication";return x.files?"controle":"atelier"}
 async function library(){
   p=null;all=await api("/projects");
   main.innerHTML=`<section class="hero"><div><h1>Bibliothèque</h1><p>Retrouve tes éditions, leurs fichiers et la prochaine étape de production.</p><div class="actions"><button id="new">＋ Nouveau projet</button><button class="ghost" id="import">Importer une fiche</button></div></div><div class="books" aria-hidden="true"><span></span><span></span><span></span></div></section>
@@ -89,16 +89,20 @@ function demoForm(){
  modal("Explorer un exemple",`<p>Choisis une édition de démonstration. Ses fichiers et sa fiche seront ajoutés à ta bibliothèque.</p><div class="actions">${Object.entries({...cfg.channels,outil:"Outil de calcul Etsy"}).map(([k,v])=>`<button data-demo="${k}">${v}</button>`).join("")}</div>`);
  bind("[data-demo]","click",async(e,el)=>{el.disabled=true;try{const x=await api("/demo/"+el.dataset.demo,"POST");close();go(x.id,"controle")}finally{el.disabled=false}});
 }
-function guide(){return '<div class="stack"><p><b>Atelier.</b> Copie la mission dans ChatGPT, puis ouvre « Importer la réponse ChatGPT ». Colle sa réponse, vérifie l’aperçu et enregistre-la. La validation de l’étape t’appartient.</p><p><b>Importer.</b> Dépose les fichiers prêts. Attribue à chacun un rôle. Remplacer un nom identique conserve la version précédente.</p><p><b>Contrôler et déposer.</b> Corrige les erreurs, prépare le ZIP et examine les points humains. Déclare le statut après confirmation sur Etsy ou KDP.</p><p><b>Sauvegarder.</b> Télécharge une sauvegarde complète du catalogue et des originaux. La procédure de restauration figure dans le README fourni.</p></div>'}
+function guide(){return '<div class="stack"><p><b>Atelier.</b> Copie la mission dans ChatGPT, puis ouvre « Importer la réponse ChatGPT ». Colle sa réponse, vérifie l’aperçu et enregistre-la. La validation de l’étape t’appartient.</p><p><b>Fabrication.</b> Une fois Finition validée, télécharge le dossier et le manuscrit de Production. Copie la consigne dans ChatGPT avec ces documents pour obtenir les fichiers à importer.</p><p><b>Importer.</b> Dépose les fichiers prêts. Attribue à chacun un rôle. Remplacer un nom identique conserve la version précédente.</p><p><b>Contrôler et déposer.</b> Corrige les erreurs, prépare le ZIP et examine les points humains. Déclare le statut après confirmation sur Etsy ou KDP.</p><p><b>Sauvegarder.</b> Télécharge une sauvegarde complète du catalogue et des originaux. La procédure de restauration figure dans le README fourni.</p></div>'}
 async function route(){
  const generation=++routeGeneration;const [,id,requested]=location.hash.slice(1).split("/");close();
  if(!id){await library();return}
  const data=await api("/projects/"+encodeURIComponent(id));if(generation!==routeGeneration)return;
- if(p?.id!==id){stageIndex=data.stages.findIndex(s=>s.status!=="approved");if(stageIndex<0)stageIndex=7}
- p=data;const t=Object.hasOwn(tabs,requested)?requested:"atelier";
+ const opening=p?.id!==id;
+ if(opening){stageIndex=data.stages.findIndex(s=>s.status!=="approved");if(stageIndex<0)stageIndex=data.stages.length-1}
+ p=data;let t=Object.hasOwn(tabs,requested)?requested:"atelier";
+ if(opening && t==="atelier" && data.stages.every(s=>s.status==="approved")){
+   t="fabrication";history.replaceState(history.state,"","#/"+encodeURIComponent(id)+"/"+t);
+ }
  main.innerHTML=`<button class="link" id="back">← Bibliothèque</button><div class="splithead"><div><span class="upper">${esc(cfg.channels[p.manifest.channel])} · ${esc(kinds[p.manifest.kind])} · v${esc(p.manifest.version)}</span><h1>${esc(p.manifest.title)}</h1></div><div><span class="tag">${esc(p.status)}</span> <button id="edition">Nouvelle édition</button></div></div><nav class="tabs" aria-label="Sections du projet">${Object.entries(tabs).map(([k,v])=>`<button data-tab="${k}" class="${k===t?"sel":""}">${v}</button>`).join("")}</nav><div id="content"></div>`;
  bind("#back","click",()=>go());bind("[data-tab]","click",(e,el)=>go(id,el.dataset.tab));bind("#edition","click",edition);
- await ({atelier:workshop,fiche:metadata,fichiers:files,controle:checks,depot:publication,historique:historyPage})[t]();
+ await ({atelier:workshop,fabrication:delivery,fiche:metadata,fichiers:files,controle:checks,depot:publication,historique:historyPage})[t]();
 }
 function edition(){
  modal("Créer une édition",`<form id="editionform" class="stack"><label>Version<input name="version" required placeholder="Ex. 1.1"></label><label>Destination<select name="channel">${opt(cfg.channels,p.manifest.channel)}</select></label><p>Les fichiers et les étapes sont repris. Le suivi de publication démarre au brouillon.</p><button class="primary">Créer l’édition</button></form>`);
@@ -286,6 +290,115 @@ function importStageReply(clearManualDraft, initial="", fromManualField=false) {
   });
 }
 
+function specialtyForm() {
+  const options={"":"Selon la fiche · "+kinds[p.manifest.kind],...kinds};
+  return `<details class="workshop-kind"><summary>Spécialité des missions</summary>
+    <form id="kind-form" class="stack"><label>Parcours de production<select id="workshop-kind" name="kind">
+      ${opt(options,p.workshop_kind??"")}
+    </select></label><button id="apply-workshop-kind">Appliquer le parcours</button></form></details>`;
+}
+
+function bindSpecialty(refresh) {
+  bind("#kind-form","submit",async(e,form)=>{
+    e.preventDefault();
+    const button=$("button",form);
+    button.disabled=true;
+    try {
+      const result=await api(pp()+"/workshop-kind","PUT",{kind:form.elements.kind.value || null},true);
+      if (!form.isConnected) return;
+      p=result;
+      await refresh();
+      note("Parcours enregistré. La prochaine consigne utilisera cette spécialité.");
+    } finally {button.disabled=false}
+  });
+}
+
+function deliveryAction(state) {
+  const nextStage=p.stages.findIndex(stage=>stage.status!=="approved");
+  const actions={
+    workshop:["Reprendre l’atelier","La prochaine étape à valider est "+(cfg.stages[nextStage] || "Finition")+".","workshop"],
+    fabricate:["Fabriquer les fichiers du produit","Télécharge le dossier de fabrication et le manuscrit de Production ci-dessous. Joins-les à la consigne dans ChatGPT, puis importe ici les fichiers que tu auras téléchargés.","copy"],
+    check:["Vérifier les fichiers et la fiche",state.blocking_count
+      ?"Le rapport de contrôle détaille les points à corriger avant le dépôt."
+      :"Relis le rapport et effectue les vérifications humaines sur les fichiers.","checks"],
+    deposit:["Préparer le dépôt","Ouvre le dossier de dépôt, télécharge le ZIP et suis les instructions pour cette destination.","deposit"],
+    published:["Consulter la publication","Cette édition est enregistrée comme publiée. Le suivi du dépôt conserve la référence déclarée.","deposit"]
+  };
+  if (state.next==="deposit" && ["Dépôt en cours","Soumis","En examen"].includes(state.status))
+    return ["Suivre le dépôt","Ouvre le suivi pour retrouver la référence et enregistrer le prochain statut observé sur la plateforme.","deposit"];
+  if (state.next==="check" && state.status==="Correction nécessaire")
+    return ["Corriger le dossier","Consulte les contrôles et les corrections demandées par la plateforme, puis vérifie les fichiers révisés.","checks"];
+  return actions[state.next];
+}
+
+async function delivery() {
+  const projectId=p.id;
+  const base=pp()+"/delivery";
+  const container=$("#content");
+  const state=await api(base);
+  if (!container.isConnected || p?.id!==projectId) return;
+  const [title,detail,primary]=deliveryAction(state);
+  const labels={
+    copy:"Copier la consigne de fabrication", workshop:"Reprendre l’étape à valider",
+    files:"Importer les fichiers", checks:"Ouvrir les contrôles", deposit:"Ouvrir le dépôt"
+  };
+  const button=action=>`<button id="delivery-${action}" data-delivery-action="${action}" class="${action===primary?"primary":""}">${labels[action]}</button>`;
+  const roleLabel=role=>{
+    if (role==="cover") return state.channel==="paper"?"Couverture complète PDF":"Couverture JPEG";
+    if (role==="preview") return "Image commerciale (PNG ou JPEG)";
+    return cfg.roles[role] || role;
+  };
+  const rows=(roles,missing)=>roles.map(role=>{
+    const active=p.files.filter(f=>f.active && f.role===role);
+    const filenames=active.map(f=>esc(f.name)).join(" · ");
+    return `<li><div><b>${esc(roleLabel(role))}</b>${filenames?`<small>${filenames}</small>`:""}</div>
+      <span class="delivery-role ${missing?"missing":""}">${missing?"À fournir":"Importé"}</span></li>`;
+  }).join("");
+  const supporting=["files","checks","deposit"].filter(action=>action!==primary);
+  const sourceDocs=state.approved_count>0 ? `<section class="panel stack"><h3>Documents de fabrication</h3>
+      <p>Le dossier réunit les résultats validés de l’atelier. Le manuscrit reprend le texte enregistré à l’étape Production.</p>
+      <div class="actions"><a class="btn" id="delivery-dossier" href="/api${base}/dossier" download>Télécharger le dossier de fabrication</a>
+      ${state.manuscript_available?`<a class="btn" id="delivery-manuscript" href="/api${base}/manuscript" download>Télécharger le manuscrit de production</a>`:""}</div>
+      ${state.approved && primary!=="copy"?button("copy"):""}
+    </section>`:"";
+  container.innerHTML=`<div class="delivery stack">
+    <div class="section-head"><div><span class="upper">${state.approved_count} / ${cfg.stages.length} étapes validées</span>
+      <h2>Fabrication et livraison</h2></div>${state.approved?'<button class="link" id="delivery-finish">Relire la finition</button>':""}</div>
+    <section class="delivery-next stack" id="delivery-next" data-next="${esc(state.next)}">
+      <span class="upper">Prochaine action</span><h3>${esc(title)}</h3><p>${esc(detail)}</p>
+      <div class="actions">${button(primary)}</div>
+    </section>
+    <section class="panel delivery-specialty"><p>Spécialité de fabrication · <strong>${esc(kinds[state.kind])}</strong></p>
+      ${specialtyForm()}</section>
+    ${sourceDocs}
+    <section class="panel stack"><div><span class="upper">${esc(cfg.channels[state.channel])}</span><h3>Fichiers du produit</h3></div>
+      <ul class="delivery-files">${rows(state.missing_roles,true)}${rows(state.ready_roles,false)}</ul>
+      ${state.next==="fabricate"?'<p class="sub">Tu as déjà ces fichiers ? Importe-les et attribue à chacun son rôle.</p>':""}
+      ${state.approved?'<p class="sub">Avant le dépôt, compare les fichiers importés à l’inventaire de Finition. Vérifie chaque variante, format et page prévus, même lorsqu’un fichier est déjà associé à chaque rôle.</p>':""}
+      <div class="actions">${supporting.map(button).join("")}</div>
+    </section>
+  </div>`;
+  bind("#delivery-dossier, #delivery-manuscript","click",async(e,el)=>{
+    e.preventDefault();
+    const part=el.id==="delivery-dossier"?"dossier":"manuscript";
+    const filename=part==="dossier"?"dossier-fabrication.md":"manuscrit-production.md";
+    await downloadResponse(await api(base+"/"+part,"GET",undefined,false,true),filename);
+  },container);
+  bind("[data-delivery-action]","click",async(e,el)=>{
+    const action=el.dataset.deliveryAction;
+    if (action==="copy") {
+      await showCopiedPrompt(state.prompt,"Consigne copiée. Joins le dossier de fabrication et le manuscrit dans ChatGPT.");
+    } else if (action==="workshop") {
+      stageIndex=p.stages.findIndex(s=>s.status!=="approved");
+      go(projectId,"atelier");
+    } else {
+      go(projectId,{files:"fichiers",checks:"controle",deposit:"depot"}[action]);
+    }
+  },container);
+  bind("#delivery-finish","click",()=>{stageIndex=cfg.stages.length-1;go(projectId,"atelier")},container);
+  bindSpecialty(delivery);
+}
+
 async function workshop(){
   const stage=p.stages[stageIndex];
   const name=cfg.stages[stageIndex];
@@ -295,11 +408,7 @@ async function workshop(){
   ).join("");
   $("#content").innerHTML=`<div class="two"><aside>
       <nav class="stages" aria-label="Étapes de production">${stages}</nav>
-      <details class="workshop-kind"><summary>Spécialité des missions</summary>
-        <form id="kind-form" class="stack"><label>Parcours de production<select id="workshop-kind" name="kind">
-          ${opt({"":"Selon la fiche · "+kinds[p.manifest.kind],...kinds},p.workshop_kind??"")}
-        </select></label><button id="apply-workshop-kind">Appliquer le parcours</button></form>
-      </details>
+      ${specialtyForm()}
     </aside><section class="panel stack">
       <div><span class="upper">Mission ${stageIndex+1} sur ${cfg.stages.length} · ${esc(kinds[p.workshop_kind || p.manifest.kind])}</span><h2>${esc(name)}</h2></div>
       <span class="tag">${statuses[stage.status]}</span>
@@ -312,6 +421,11 @@ async function workshop(){
         <div class="actions"><button data-decision="draft">Enregistrer</button><button data-decision="revise">Demander une correction</button>
         <button class="primary" data-decision="approve">Valider l’étape</button></div></form>
       ${packetDetails(stage.packet,true)}
+      ${stageIndex===cfg.stages.length-1?`<section class="delivery-preview"><h3>Après la finition</h3>
+        ${p.stages.every(s=>s.status==="approved")
+          ?'<p>Les huit étapes sont validées. Retrouve les documents et les fichiers à produire.</p><button id="open-delivery">Ouvrir la fabrication</button>'
+          :'<p>Lorsque les huit étapes seront validées, la fabrication s’ouvrira. Tu y trouveras le manuscrit, le dossier de travail et la consigne pour créer les fichiers du produit.</p>'}
+        </section>`:""}
     </section></div>`;
   const clear=draftForm("#stageform",p.id+"/stage/"+stageIndex);
   bind("[data-step]","click",async(e,el)=>{stageIndex=Number(el.dataset.step);await workshop()});
@@ -319,19 +433,14 @@ async function workshop(){
   bind("#viewMission","click",async()=>modal(name,`<pre>${esc((await api(missionPath)).text)}</pre>`));
   bind("#copy","click",async()=>showCopiedPrompt((await api(missionPath)).text,"Mission copiée. Colle-la dans ChatGPT."));
   bind("#import-stage","click",()=>importStageReply(clear));
+  bind("#open-delivery","click",()=>go(p.id,"fabrication"));
   bind("#stageform [name=text]","paste",e=>{
     const pasted=e.clipboardData?.getData("text") || "";
     if (!isStagePacket(pasted)) return;
     e.preventDefault();
     importStageReply(clear,pasted);
   });
-  bind("#kind-form","submit",async e=>{
-    e.preventDefault();
-    const kind=$("#workshop-kind").value || null;
-    p=await api(pp()+"/workshop-kind","PUT",{kind},true);
-    await workshop();
-    note("Parcours enregistré. La prochaine consigne utilisera cette spécialité.");
-  });
+  bindSpecialty(workshop);
   bind("#proposal-fields input","change",()=>{
     $("#apply-proposals").disabled=!$("#proposal-fields input:checked");
   });
@@ -374,6 +483,11 @@ async function workshop(){
     }
     p=await api(pp()+"/stages/"+stageIndex,"PUT",{...fields,decision},true);
     clear();
+    if (decision==="approve" && stageIndex===cfg.stages.length-1) {
+      go(p.id,"fabrication");
+      note("Finition validée. Les documents de fabrication sont disponibles.");
+      return;
+    }
     if (decision==="approve" && stageIndex<cfg.stages.length-1) stageIndex++;
     await route();
     note("Étape enregistrée.");

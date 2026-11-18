@@ -151,6 +151,8 @@ def required(files,role,exts,label,add):
 def etsy_checks(files,add):
     client=[f for f in files if f["role"] in ("client","notice")]
     if not 1<=len(client)<=5: add("error","Etsy requiert de 1 à 5 fichiers client, notices comprises.")
+    if client and not any(f["role"] == "client" for f in client):
+        add("error","Ajoute le produit à télécharger avec le rôle Fichier client.")
     names=set()
     for f in client:
         name=delivery_name(f)

@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import Field, ValidationError
-from . import etsy, quality, store
+from . import delivery, etsy, quality, store
 from .models import *
 from .workshop import STAGES, complete_context, mission
 from .stage_reply import ApplySuggestions, RawStageReply, WorkshopKind, parse_reply, reply_template
@@ -284,6 +284,32 @@ def apply_stage_metadata(pid: str, index: int, body: ApplySuggestions, if_match:
 
 @app.get("/api/projects/{pid}/checks")
 def checks(pid:str): return quality.rows(read(pid))
+
+@app.get("/api/projects/{pid}/delivery")
+def delivery_overview(pid: str):
+    return delivery.overview(read(pid))
+
+
+@app.get("/api/projects/{pid}/delivery/dossier")
+def delivery_dossier(pid: str):
+    project = read(pid)
+    if not any(stage["status"] == "approved" for stage in project["stages"]):
+        raise HTTPException(409, "Valide une étape pour télécharger le dossier de fabrication.")
+    return PlainTextResponse(
+        delivery.approved_dossier(project), media_type="text/markdown",
+        headers={"Content-Disposition": 'attachment; filename="dossier-fabrication.md"'},
+    )
+
+
+@app.get("/api/projects/{pid}/delivery/manuscript")
+def delivery_manuscript(pid: str):
+    stage = read(pid)["stages"][delivery.PRODUCTION]
+    if stage["status"] != "approved":
+        raise HTTPException(409, "Valide l’étape Production pour télécharger son texte.")
+    return PlainTextResponse(
+        stage["text"], media_type="text/markdown",
+        headers={"Content-Disposition": 'attachment; filename="manuscrit-production.md"'},
+    )
 
 @app.get("/api/projects/{pid}/history")
 def history(pid:str):
