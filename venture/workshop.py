@@ -84,7 +84,7 @@ def _legacy_excerpt(text, limit=1150):
         # Sentence-level extraction keeps a late recommendation in a long final paragraph.
         (r"\b(?:I recommend|we recommend|je recommande|nous recommandons|recommandation|recommendation[s]?)\b", "sentence"),
         (r"^\d+[.)]\s+|\*\*(?:audience|public cible|scope|périmètre|positioning|positionnement)\b", "line"),
-        (r"^\|[^|]*(?:page sizes?|paper sizes?|formats? (?:de page|papier)|dimensions?|couleurs?|colou?rs?|variantes?)\b[^|]*\|", "line"),
+        (r"^\|[^|]*(?:page sizes?|paper sizes?|formats? (?:de page|papier)|dimensions?|couleurs?|colou?rs?|visual treatment|traitement visuel|variantes?)\b[^|]*\|", "line"),
         (r"^\|[^|]*(?:formats?|structure|scope|portée|unités?|units?|variables?|livrables?|deliverables?)\b[^|]*\|", "line"),
         (r"^\*\*(?:not completed|open question|à vérifier|reste à|questions ouvertes|limits?|non réalisé|non vérifié)\b", "line"),
     ]
