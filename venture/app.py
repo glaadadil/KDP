@@ -74,7 +74,7 @@ def library():
         out=[]
         for row in c.execute("SELECT body FROM projects ORDER BY json_extract(body,'$.updated') DESC,rowid DESC"):
             p=json.loads(row[0])
-            out.append(dict(id=p["id"],manifest={k:p["manifest"][k] for k in ("title","kind","version","channel","product_id")},status=p["status"],updated=p["updated"],progress=sum(s["status"]=="approved" for s in p["stages"]),review=any(s["status"]=="review" for s in p["stages"]),files=sum(f["active"] for f in p["files"])))
+            out.append(dict(id=p["id"],manifest={k:p["manifest"][k] for k in ("title","kind","version","channel","product_id")},status=p["status"],updated=p["updated"],blocking_count=p.get("blocking_count",0),progress=sum(s["status"]=="approved" for s in p["stages"]),review=any(s["status"]=="review" for s in p["stages"]),files=sum(f["active"] for f in p["files"])))
         return out
 
 @app.post("/api/projects")
@@ -92,6 +92,9 @@ def edit(pid:str,m:Manifest,if_match:str=Header()):
         if any(old[k]!=getattr(m,k) for k in ("product_id","kind","version","channel")):
             raise HTTPException(409,"Pour changer d'édition ou de canal, duplique le projet.")
         editable(p)
+        if any(old[k]!=getattr(m,k) for k in ("brief","language")):
+            for stage in p["stages"]:
+                if stage["status"]=="approved": stage["status"]="review"
         p["manifest"]=m.model_dump()
         return store.save(c,p,"Fiche mise à jour")
 
@@ -105,6 +108,8 @@ def edition(pid:str,new:Edition):
         copy["stages"]=p["stages"]
         if m["channel"]!=p["manifest"]["channel"]:
             m["expected"]=[]
+            for stage in copy["stages"]:
+                if stage["status"]=="approved": stage["status"]="review"
             for f in copy["files"]:
                 if f["role"]!="source": f["role"]="pending"
         return store.save(c,copy,"Édition dérivée de "+p["manifest"]["version"])

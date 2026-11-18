@@ -111,7 +111,11 @@ def rows(project):
     for e in m["expected"]:
         f=active.get(e["name"].casefold())
         if not f or f["role"]!=e["role"]: add("error","Fichier attendu absent ou rôle incorrect : "+e["name"])
+    digests={}
     for f in files:
+        if f["sha256"] in digests:
+            add("warning","Contenu identique sous deux noms : "+digests[f["sha256"]]+" et "+f["name"])
+        digests[f["sha256"]]=f["name"]
         if not original(f).is_file(): add("error","Original introuvable : "+f["name"])
         if f["role"]=="pending": add("error","Confirme le rôle de "+f["name"])
         if f["info"].get("error"): add("error",f["name"]+" • "+f["info"]["error"])

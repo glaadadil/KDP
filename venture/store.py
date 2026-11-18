@@ -45,6 +45,12 @@ def get(c,pid):
 
 def save(c,p,message):
     m=p["manifest"]
+    # Refresh dashboard summaries only when the inputs to the checks change.
+    signature=hashlib.sha256(json.dumps([m,p["files"]],sort_keys=True).encode()).hexdigest()
+    if signature!=p.get("check_signature"):
+        from .quality import rows
+        p["blocking_count"]=sum(item["level"]=="error" for item in rows(p))
+        p["check_signature"]=signature
     p["rev"]+=1
     p["updated"]=now()
     body=json.dumps(p,ensure_ascii=False)

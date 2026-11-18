@@ -188,3 +188,33 @@ class Workflow(unittest.TestCase):
             self.assertEqual(self.c.post("/api/etsy/return",json={"url":"https://localhost/back?code=c&state=wrong"}).status_code,400)
             r=self.c.post("/api/etsy/return",json={"url":"https://localhost/back?code=c&state="+params["state"][0]})
             self.assertTrue(r.json()["connected"]);self.assertNotIn("refresh",r.text)
+
+    def test_tool_customer_zip_and_dashboard_summary(self):
+        self.demo("outil")
+        self.assertEqual(self.p["manifest"]["kind"],"outil")
+        with ZipFile(io.BytesIO(self.ready())) as z:
+            name="client/event-budget.xlsx.zip"
+            self.assertIn(name,z.namelist())
+            with ZipFile(io.BytesIO(z.read(name))) as package:
+                with ZipFile(io.BytesIO(package.read("event-budget.xlsx"))) as workbook:
+                    self.assertIn(b"SUM(B5:B9)",workbook.read("xl/worksheets/sheet1.xml"))
+        self.upload("broken.pdf",b"broken","client")
+        listed=self.c.get("/api/projects").json()
+        self.assertGreater(listed[0]["blocking_count"],0)
+
+    def test_originals_survive_failed_batch_and_duplicate_retry(self):
+        self.demo("paper")
+        data=pdf()
+        r=self.request("POST","/files",files=[("files",("good.pdf",data)),("files",("bad.xyz",b"abc"))])
+        self.assertEqual(r.status_code,422);self.refresh();self.assertEqual(len(self.p["files"]),2)
+        self.upload("extra.pdf",data,"source");rev=self.p["rev"]
+        self.upload("extra.pdf",data,"source");self.assertEqual(self.p["rev"],rev)
+        with ZipFile(io.BytesIO(self.ready())) as z:self.assertFalse(any("extra" in f for f in z.namelist()))
+
+    def test_archive_entry_and_undeclared_inputs(self):
+        for name in ("../bad.txt","C:evil.txt"):
+            output=io.BytesIO()
+            with ZipFile(output,"w") as z:
+                z.writestr("produit.json",(EX/"etsy"/"produit.json").read_bytes())
+                z.writestr(name,b"bad")
+            self.assertEqual(self.c.post("/api/bundle",files={"archive":("file.zip",output.getvalue())}).status_code,422)
