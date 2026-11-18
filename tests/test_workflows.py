@@ -218,3 +218,11 @@ class Workflow(unittest.TestCase):
                 z.writestr("produit.json",(EX/"etsy"/"produit.json").read_bytes())
                 z.writestr(name,b"bad")
             self.assertEqual(self.c.post("/api/bundle",files={"archive":("file.zip",output.getvalue())}).status_code,422)
+
+    def test_pdf_preview_pages(self):
+        self.demo()
+        path=self.base+"/files/"+self.p["files"][0]["id"]+"/page/"
+        response=self.c.get(path+"2")
+        self.assertEqual(response.status_code,200,response.text[:100] if response.status_code!=200 else "")
+        self.assertEqual(response.content[:4],b"\x89PNG")
+        self.assertEqual(self.c.get(path+"25").status_code,404)

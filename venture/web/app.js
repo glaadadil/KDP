@@ -124,6 +124,15 @@ function metadata(){
  bind("#getManifest","click",()=>download(new Blob([JSON.stringify(m,null,2)],{type:"application/json"}),"produit.json"));
 }
 
+function showPreview(f,page=1){
+ const url="/api"+pp()+"/files/"+f.id;
+ if(f.info.ext!==".pdf"){modal(f.name,`<img class="preview" alt="Aperçu de ${esc(f.name)}" src="${url}?inline=true">`);return}
+ const count=f.info.pages;
+ modal(f.name,`<img class="preview" alt="Page ${page} du PDF" src="${url}/page/${page}"><div class="actions"><button id="previous" ${page<=1?"disabled":""}>Page précédente</button><span>${page} / ${count}</span><button id="next" ${page>=count?"disabled":""}>Page suivante</button></div>`);
+ bind("#previous","click",()=>showPreview(f,page-1));bind("#next","click",()=>showPreview(f,page+1));
+}
+
+
 function files(){
  const active=p.files.filter(f=>f.active),older=p.files.filter(f=>!f.active);
  const compatible={etsy:["client","notice","preview"],paper:["interior","cover"],kindle:["ebook","cover"]}[p.manifest.channel];
@@ -141,7 +150,7 @@ function files(){
  for(const evt of ["dragover","dragleave","drop"])bind("#zone",evt,(e)=>{e.preventDefault();zone.classList.toggle("over",evt==="dragover");if(evt==="drop")return upload(e.dataTransfer.files)});
  bind("[data-role]","change",async(e,el)=>{p=await api(pp()+"/files/"+el.dataset.role,"PATCH",{role:el.value},true);files()});
  bind("[data-remove]","click",async(e,el)=>{if(!confirm("Retirer ce fichier de l’édition ? L’original restera consultable."))return;p=await api(pp()+"/files/"+el.dataset.remove,"DELETE",undefined,true);files()});
- bind("[data-preview]","click",(e,el)=>{const f=p.files.find(x=>x.id===el.dataset.preview),url="/api"+pp()+"/files/"+f.id+"?inline=true";modal(f.name,f.info.ext===".pdf"?`<iframe title="Aperçu PDF" class="preview" src="${url}"></iframe>`:`<img class="preview" alt="Aperçu de ${esc(f.name)}" src="${url}">`)});
+ bind("[data-preview]","click",(e,el)=>showPreview(p.files.find(x=>x.id===el.dataset.preview)));
  bind("#tochecks","click",()=>go(p.id,"controle"));
 }
 async function checks(){

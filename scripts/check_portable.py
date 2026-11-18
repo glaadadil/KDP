@@ -30,6 +30,9 @@ with tempfile.TemporaryDirectory() as temp:
         for ch in ("etsy","paper","kindle","outil"):
             with opener.open(Request(base+"/api/demo/"+ch,method="POST",headers=headers)) as r:project=json.load(r)
             endpoint=base+"/api/projects/"+project["id"]
+            if ch=="paper":
+                url=endpoint+"/files/"+project["files"][0]["id"]+"/page/1"
+                with opener.open(url) as r: assert r.read(4)==b"\x89PNG"
             with opener.open(endpoint+"/checks") as r:assert not any(x["level"]=="error" for x in json.load(r))
             with opener.open(Request(endpoint+"/export",method="POST",headers={**headers,"If-Match":str(project["rev"])})) as r:assert r.read(4)==b"PK\x03\x04"
         print("Portable Windows : lancement et quatre dossiers de dépôt vérifiés.")

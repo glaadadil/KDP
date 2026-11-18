@@ -401,3 +401,14 @@ def import_bundle(archive:UploadFile=File()):
             with store.db() as c: return store.save(c,p,"Manifeste et fichiers importés")
     except (BadZipFile,ValidationError,UnicodeError,ValueError,RuntimeError) as exc:
         raise HTTPException(422,"Archive ou manifeste invalide. Vérifie le format et les champs de produit.json.") from exc
+
+@app.get("/api/projects/{pid}/files/{fid}/page/{number}")
+def preview_page(pid:str,fid:str,number:int):
+    from fastapi.responses import Response
+    from .preview import pdf_page
+    f=find_file(read(pid),fid)
+    if f["info"]["ext"]!=".pdf" or not 1<=number<=f["info"].get("pages",0):
+        raise HTTPException(404,"Page PDF introuvable.")
+    try: png=pdf_page(store.original(f),number)
+    except Exception: raise HTTPException(422,"Aperçu indisponible pour cette page. Télécharge l’original.")
+    return Response(png,media_type="image/png")

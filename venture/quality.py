@@ -62,6 +62,7 @@ def inspect(path,name):
             with Image.open(path) as im:
                 if im.format!=("PNG" if ext==".png" else "JPEG"): raise ValueError()
                 info["pixels"]=im.size
+                info["color_mode"]=im.mode
                 im.verify()
             with Image.open(path) as im: im.load()
         elif ext in (".zip",".epub",".docx",".xlsx",".ods"):
@@ -129,6 +130,8 @@ def rows(project):
         cover=required(files,"cover",{".jpg",".jpeg"},"Couverture Kindle JPEG",add)
         if cover and "pixels" in cover["info"]:
             w,h=cover["info"]["pixels"]
+            if cover["info"].get("color_mode")=="CMYK": add("error","Convertis la couverture Kindle en RVB.")
+            if h<2500: add("warning","Pour une couverture Kindle plus nette, vise au moins 2 500 pixels de hauteur.")
             if w>=h: add("warning","Vérifie l'orientation de la couverture Kindle.")
         if manuscript: add("human","Parcours l'EPUB dans Kindle Previewer, y compris la navigation et les illustrations.")
     add("human","Valide les droits, la déclaration IA, la catégorie et le rendu. Vérifie les prix, frais ou redevances dans la plateforme.")
