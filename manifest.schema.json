@@ -1,0 +1,229 @@
+{
+  "$defs": {
+    "Expected": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "client",
+            "notice",
+            "preview",
+            "interior",
+            "cover",
+            "ebook",
+            "source",
+            "pending"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "role"
+      ],
+      "title": "Expected",
+      "type": "object"
+    },
+    "PrintOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "trim": {
+          "default": "6x9",
+          "enum": [
+            "5x8",
+            "5.5x8.5",
+            "6x9",
+            "7x10",
+            "8x10"
+          ],
+          "title": "Trim",
+          "type": "string"
+        },
+        "paper": {
+          "default": "white",
+          "enum": [
+            "white",
+            "cream",
+            "standard-color",
+            "premium-color"
+          ],
+          "title": "Paper",
+          "type": "string"
+        },
+        "bleed": {
+          "default": false,
+          "title": "Bleed",
+          "type": "boolean"
+        }
+      },
+      "title": "PrintOptions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "product_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,80}$",
+      "title": "Product Id",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "livre",
+        "outil",
+        "imprimable"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "channel": {
+      "enum": [
+        "etsy",
+        "paper",
+        "kindle"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "version": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Version",
+      "type": "string"
+    },
+    "language": {
+      "default": "en",
+      "maxLength": 40,
+      "minLength": 2,
+      "title": "Language",
+      "type": "string"
+    },
+    "brief": {
+      "default": "",
+      "maxLength": 10000,
+      "title": "Brief",
+      "type": "string"
+    },
+    "subtitle": {
+      "default": "",
+      "maxLength": 200,
+      "title": "Subtitle",
+      "type": "string"
+    },
+    "author": {
+      "default": "",
+      "maxLength": 150,
+      "title": "Author",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "maxLength": 10000,
+      "title": "Description",
+      "type": "string"
+    },
+    "keywords": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 40,
+      "title": "Keywords",
+      "type": "array"
+    },
+    "category": {
+      "default": "",
+      "maxLength": 250,
+      "title": "Category",
+      "type": "string"
+    },
+    "price": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "maximum": 1000000,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Price"
+    },
+    "currency": {
+      "default": "USD",
+      "pattern": "^[A-Z]{3}$",
+      "title": "Currency",
+      "type": "string"
+    },
+    "ai": {
+      "default": "unknown",
+      "enum": [
+        "unknown",
+        "none",
+        "assisted",
+        "generated"
+      ],
+      "title": "Ai",
+      "type": "string"
+    },
+    "ai_details": {
+      "default": "",
+      "maxLength": 1000,
+      "title": "Ai Details",
+      "type": "string"
+    },
+    "print": {
+      "$ref": "#/$defs/PrintOptions"
+    },
+    "expected": {
+      "items": {
+        "$ref": "#/$defs/Expected"
+      },
+      "maxItems": 100,
+      "title": "Expected",
+      "type": "array"
+    },
+    "declared_checks": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Declared Checks",
+      "type": "array"
+    },
+    "declared_validations": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Declared Validations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "title",
+    "kind",
+    "channel",
+    "version"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

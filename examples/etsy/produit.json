@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "product_id": "field-notes-example",
+  "title": "Field Record Worksheet",
+  "kind": "imprimable",
+  "channel": "etsy",
+  "version": "1.0",
+  "language": "en",
+  "description": "A sample edition from the Field Notes collection for the local publishing workflow.",
+  "author": "Venture Studio",
+  "brief": "An example for readers who keep a record of everyday observations.",
+  "keywords": [
+    "field notes",
+    "observation"
+  ],
+  "category": "Journals",
+  "price": 9.9,
+  "currency": "USD",
+  "ai": "generated",
+  "ai_details": "Synthetic example text and layout prepared with AI.",
+  "expected": [
+    {
+      "name": "field-record.pdf",
+      "role": "client"
+    },
+    {
+      "name": "worksheet-preview.jpg",
+      "role": "preview"
+    }
+  ]
+}
